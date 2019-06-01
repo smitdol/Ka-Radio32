@@ -83,7 +83,7 @@ Copyright (C) 2017  KaraWin
 #include "vs1053.h"
 #include "ClickEncoder.h"
 #include "addon.h"
-//#include "rda5807Task.h"
+#include "rda5807Task.h"
 
 /* The event group allows multiple bits for each event*/
 //   are we connected  to the AP with an IP? */
@@ -887,7 +887,7 @@ void app_main()
 	setRotat(rt) ;	
 	lcd_init(g_device->lcd_type);
 	
-/*	
+
 	// Init i2c if lcd doesn't not (spi) for rde5807=
 	if (g_device->lcd_type >= LCD_SPI)
 	{
@@ -904,7 +904,7 @@ void app_main()
 		//ESP_ERROR_CHECK
 		(i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0));			
 	}
-*/
+
 
 	
 	// output mode
@@ -1025,12 +1025,12 @@ void app_main()
 	xTaskCreatePinnedToCore (task_addon, "task_addon", 2200, NULL, PRIO_ADDON, &pxCreatedTask,CPU_ADDON);  
 	ESP_LOGI(TAG, "%s task: %x","task_addon",(unsigned int)pxCreatedTask);	
 
-/*	if (RDA5807M_detection())
+	if (RDA5807M_detection())
 	{
 		xTaskCreatePinnedToCore(rda5807Task, "rda5807Task", 2500, NULL, 3, &pxCreatedTask,1);  //
 		ESP_LOGI(TAG, "%s task: %x","rda5807Task",(unsigned int)pxCreatedTask);
 	}
-*/	
+	
 	vTaskDelay(60);// wait tasks init
 	ESP_LOGI(TAG," Init Done");
 	

@@ -101,10 +101,9 @@
 #define PIN_TOUCH_CS	GPIO_NONE //Chip select T_CS
 
 // I2C rda5807 (if lcd is spi)
-// (removed)
 //----------------------------
-//#define PIN_SI2C_SCL GPIO_NUM_15
-//#define PIN_SI2C_SDA GPIO_NUM_27
+#define PIN_SI2C_SCL GPIO_NUM_15
+#define PIN_SI2C_SDA GPIO_NUM_27
 
 // to set a value: 		gpio_set_level(gpio_num_t gpio_num,value);
 // to read a value: 	int gpio_get_level(gpio_num_t gpio_num)
