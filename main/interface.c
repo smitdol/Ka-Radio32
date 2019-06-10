@@ -1177,18 +1177,35 @@ void setLogLevel(esp_log_level_t level)
 	displayLogLevel();
 } 
 
-/*
+
 void fmSeekUp()
-{seekUp();seekingComplete(); kprintf("##FM.FREQ#: %3.2f MHz\n",getFrequency());}
+{
+	seekUp();
+	seekingComplete();
+	kprintf("##FM.FREQ#: %3.2f MHz\n",getFrequency());
+}
+
 void fmSeekDown()
-{seekDown();seekingComplete(); kprintf("##FM.FREQ#: %3.2f MHz\n",getFrequency());}
+{
+	seekDown();
+	seekingComplete();
+	kprintf("##FM.FREQ#: %3.2f MHz\n",getFrequency());
+}
+
 void fmVol(char* tmp)
-{clientVol(tmp);}
+{
+	clientVol(tmp);
+}
+
 void fmMute()
-{RDA5807M_unmute(RDA5807M_FALSE); }
+{
+	RDA5807M_unmute(RDA5807M_FALSE); 
+}
+
 void fmUnmute()
-{RDA5807M_unmute(RDA5807M_TRUE);}
-*/
+{
+	RDA5807M_unmute(RDA5807M_TRUE);
+}
 
 void sys_conf()
 {
@@ -1217,8 +1234,8 @@ void checkCommand(int size, char* s)
 	int i;
 	for(i=0;i<size;i++) tmp[i] = s[i];
 	tmp[size] = 0;
-//	kprintf("size: %d, cmd=%s\n",size,tmp);
-/*	if(startsWith ("fm.", tmp))
+	kprintf("size: %d, cmd=%s\n",size,tmp);
+	if(startsWith ("fm.", tmp))
 	{
 		if(strcmp(tmp+3, "up") == 0) 	fmSeekUp();
 		else if(strcmp(tmp+3, "down") == 0) 	fmSeekDown();
@@ -1227,7 +1244,6 @@ void checkCommand(int size, char* s)
 		else if(startsWith (  "vol",tmp+3)) 	clientVol(tmp);	
 		else printInfo(tmp);
 	} else
-*/		
 	if(startsWith ("dbg.", tmp))
 	{
 		if     (strcmp(tmp+4, "fifo") == 0) 	kprintf( "Buffer fill %u%%, %d bytes, OverRun: %ld, UnderRun: %ld\n",
