@@ -23,7 +23,7 @@
 #include "addonu8g2.h"
 #include "app_main.h"
 #include "xpt2046.h"
-//#include "rda5807Task.c"
+#include "rda5807Task.c"
 #include "ClickEncoder.h"
 #include "lwip/sockets.h"
 #include "lwip/dns.h"
@@ -66,6 +66,14 @@ cli.port(\"xxxx\"): the port number of the station on instant play\n\
 cli.instant: play the instant station\n\
 cli.start: start to play the current station\n\
 cli.play(\"x\"): play the x recorded station in the list\n\
+//////////////////\n\
+  FM radio commands\n\
+//////////////////\n\
+fm.up: seek next station (up)\n\
+fm.down: seek next radio station (down)\n\
+fm.stop: mute radio\n\
+fm.start: unmute radio\n\
+fm.vol: set radio volume\n\
 "};
 
 const char stritHELP1[]  = {"\
