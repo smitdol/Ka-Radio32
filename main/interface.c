@@ -66,14 +66,6 @@ cli.port(\"xxxx\"): the port number of the station on instant play\n\
 cli.instant: play the instant station\n\
 cli.start: start to play the current station\n\
 cli.play(\"x\"): play the x recorded station in the list\n\
-//////////////////\n\
-  FM radio commands\n\
-//////////////////\n\
-fm.up: seek next station (up)\n\
-fm.down: seek next radio station (down)\n\
-fm.stop: mute radio\n\
-fm.start: unmute radio\n\
-fm.vol: set radio volume\n\
 "};
 
 const char stritHELP1[]  = {"\
@@ -131,6 +123,15 @@ sys.hencx(\"y\") with y=0 Normal, y=1 Half\n\
 sys.cali[brate]: start a touch screen calibration\n\
 sys.ledpola and sys.ledpola(\"x\"): display or set the polarity of the system led\n\
 sys.conf: Display the label of the csv file\n\
+//////////////////\n\
+  FM radio commands\n\
+//////////////////\n\
+fm.up: seek next station (up)\n\
+fm.down: seek next radio station (down)\n\
+fm.stop: mute radio\n\
+fm.start: unmute radio\n\
+fm.vol: set radio volume\n\
+fm.dbg: radio debug info\n\
 ///////////\n\
   Other\n\
 ///////////\n\
@@ -771,7 +772,7 @@ void clientVol(char *s)
 		if ((atoi(vol)>=0)&&(atoi(vol)<=254))
 		{	
 			setVolumew(vol);
-//			if (RDA5807M_detection()) RDA5807M_setVolume(atoi(vol)/16);
+			if (RDA5807M_detection()) RDA5807M_setVolume(atoi(vol)/16);
 		}	
 		free(vol);
     }	
@@ -1205,6 +1206,17 @@ void fmVol(char* tmp)
 	clientVol(tmp);
 }
 
+void fmDbg()
+{
+	kprintf("detect RDA5807M "); 
+	if (RDA5807M_detection())
+	{
+		kprintf(" detected\n");
+		kprintf("##FM.FREQ#: %3.2f MHz\n",getFrequency());
+	}
+	else kprintf(" not detected\n");
+}
+
 void fmMute()
 {
 	RDA5807M_unmute(RDA5807M_FALSE); 
@@ -1250,6 +1262,7 @@ void checkCommand(int size, char* s)
 		else if(strcmp(tmp+3, "stop") == 0) 	fmMute(); 
 		else if(strcmp(tmp+3, "start") == 0) 	fmUnmute(); 
 		else if(startsWith (  "vol",tmp+3)) 	clientVol(tmp);	
+		else if(strcmp(tmp+3, "dbg") == 0) 	fmDbg();
 		else printInfo(tmp);
 	} else
 	if(startsWith ("dbg.", tmp))
