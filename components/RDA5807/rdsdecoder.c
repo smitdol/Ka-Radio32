@@ -14,7 +14,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
 #include "rdsdecoder.h"
 #include "constants.h"
 #include "tmc_events.h"
@@ -23,7 +25,7 @@
 void dout(const char* fmt, ...) {
 	/* prototype*/
 }
-void log(const char* fmt, ...) {
+void LOG(const char* fmt, ...) {
 	/* prototype*/
 }
 
@@ -31,7 +33,7 @@ void rdsdecoder_reset() {
 
 	memset(rdsdecoder_radiotext, ' ', sizeof(rdsdecoder_radiotext));
 	memset(rdsdecoder_program_service_name, '.', sizeof(rdsdecoder_program_service_name));
-	memset(rdsdecoder_rdsdecoder_af_string,' ', sizeof(rdsdecoder_rdsdecoder_af_string))
+	memset(rdsdecoder_af_string,' ', sizeof(rdsdecoder_af_string));
 	for (int i=0; i < 6; i++ ){
 		memset(message[i], ' ', sizeof(message[i]));
 	}
@@ -58,7 +60,7 @@ void rdsdecoder_reset() {
  * type 5 = ClockTime
  * type 6 = Alternative Frequencies */
 void rdsdecoder_send_message(long msgtype, char* msgtext, int len) {
-    strncpy(message[msgtype], msgtext, min(sizeof(message[msgtype]),len));
+    strncpy(message[msgtype], msgtext, sizeof(message[msgtype]));
 }
 
 /* BASIC TUNING: see page 21 of the standard */
@@ -83,34 +85,34 @@ void rdsdecoder_decode_type0(unsigned int *group, bool B) {
 	/* see page 41, table 9 of the standard */
 	switch (segment_address) {
 		case 0:
-			mono_stereo=decoder_control_bit;
+			rdsdecoder_mono_stereo=decoder_control_bit;
 		break;
 		case 1:
-			artificial_head=decoder_control_bit;
+			rdsdecoder_artificial_head=decoder_control_bit;
 		break;
 		case 2:
-			compressed=decoder_control_bit;
+			rdsdecoder_compressed=decoder_control_bit;
 		break;
 		case 3:
-			static_pty=decoder_control_bit;
+			rdsdecoder_static_pty=decoder_control_bit;
 		break;
 		default:
 		break;
 	}
-	flagstring[0] = traffic_program        ? '1' : '0';
-	flagstring[1] = traffic_announcement   ? '1' : '0';
-	flagstring[2] = music_speech           ? '1' : '0';
-	flagstring[3] = mono_stereo            ? '1' : '0';
-	flagstring[4] = artificial_head        ? '1' : '0';
-	flagstring[5] = compressed             ? '1' : '0';
-	flagstring[6] = static_pty             ? '1' : '0';
+	flagstring[0] = rdsdecoder_traffic_program        ? '1' : '0';
+	flagstring[1] = rdsdecoder_traffic_announcement   ? '1' : '0';
+	flagstring[2] = rdsdecoder_music_speech           ? '1' : '0';
+	flagstring[3] = rdsdecoder_mono_stereo            ? '1' : '0';
+	flagstring[4] = rdsdecoder_artificial_head        ? '1' : '0';
+	flagstring[5] = rdsdecoder_compressed             ? '1' : '0';
+	flagstring[6] = rdsdecoder_static_pty             ? '1' : '0';
 	
 
 	if(!B) { // type 0A
-		af_code_1 = int(group[2] >> 8) & 0xff;
-		af_code_2 = int(group[2])      & 0xff;
-		af_1 = decode_af(af_code_1);
-		af_2 = decode_af(af_code_2);
+		af_code_1 = ((int)group[2] >> 8) & 0xff;
+		af_code_2 = ((int)group[2])      & 0xff;
+		af_1 = rdsdecoder_decode_af(af_code_1);
+		af_2 = rdsdecoder_decode_af(af_code_2);
 
 		if(af_1) {
 			no_af += 1;
@@ -126,12 +128,12 @@ void rdsdecoder_decode_type0(unsigned int *group, bool B) {
 			if(af_1 > 80e3) {
 				snprintf(af1_string, 10, "%2.2fMHz", (af_1/1e3));
 			} else if((af_1<2e3)&&(af_1>100)) {
-				snprintf(af1_string, 10, "%ikHz", int(af_1));
+				snprintf(af1_string, 10, "%ikHz", (int)af_1);
 			}
 			if(af_2 > 80e3) {
 				snprintf(af2_string, 10, "%2.2fMHz", (af_2/1e3));
 			} else if ((af_2 < 2e3) && (af_2 > 100)) {
-				snprintf(af2_string, 10, "%ikHz", int(af_2));
+				snprintf(af2_string, 10, "%ikHz", (int)af_2);
 			}
 		}
 		if(no_af == 1) {
@@ -143,16 +145,16 @@ void rdsdecoder_decode_type0(unsigned int *group, bool B) {
 		}
 	}
 
-	log( "==> %.*s" , 8, program_service_name, 8);
-	log( "<== - %s" , (traffic_program ? "TP" : "  "));
-	log( " - %s " , (traffic_announcement ? "TA" : "  "));
-	log( " - %s " , (music_speech ? "Music" : "Speech"));
-	log( " - %s " , (mono_stereo ? "MONO" : "STEREO"));
-	log( " - AF: %s\n" , af_string );
+	LOG( "==> %.*s" , 8, rdsdecoder_program_service_name, 8);
+	LOG( "<== - %s" , (rdsdecoder_traffic_program ? "TP" : "  "));
+	LOG( " - %s " , (rdsdecoder_traffic_announcement ? "TA" : "  "));
+	LOG( " - %s " , (rdsdecoder_music_speech ? "Music" : "Speech"));
+	LOG( " - %s " , (rdsdecoder_mono_stereo ? "MONO" : "STEREO"));
+	LOG( " - AF: %s\n" , rdsdecoder_af_string );
 
-	rdsdecoder_send_message(1, program_service_name, sizeof(program_service_name));
+	rdsdecoder_send_message(1, rdsdecoder_program_service_name, sizeof(rdsdecoder_program_service_name));
 	rdsdecoder_send_message(3, flagstring, sizeof(flagstring));
-	rdsdecoder_send_message(6, af_string, sizeof(af_string));
+	rdsdecoder_send_message(6, rdsdecoder_af_string, sizeof(rdsdecoder_af_string));
 	
 }
 
@@ -202,10 +204,10 @@ void rdsdecoder_decode_type1(unsigned int *group, bool B){
 	int minute = (int) (group[3]        & 0x3f);
 
 	if(radio_paging_codes) {
-		log( "paging codes: %i " , int(radio_paging_codes));
+		LOG( "paging codes: %i " , ((int)radio_paging_codes));
 	}
 	if(day || hour || minute) {
-		log( "program item: %id, %i, %i ", day , hour , minute);
+		LOG( "program item: %id, %i, %i ", day , hour , minute);
 	}
 
 	if(!B){
@@ -214,26 +216,26 @@ void rdsdecoder_decode_type1(unsigned int *group, bool B){
 				paging = (slow_labelling >> 8) & 0x0f;
 				ecc    =  slow_labelling       & 0xff;
 				if(paging) {
-					log( "paging: %i " , paging );
+					LOG( "paging: %i " , paging );
 				}
 				if((ecc > 223) && (ecc < 229)) {
-					log( "extended country code: %s\n",
+					LOG( "extended country code: %s\n",
 						pi_country_codes[country_code-1][ecc-224]);
 				} else {
-					log( "invalid extended country code: %i\n" , ecc );
+					LOG( "invalid extended country code: %i\n" , ecc );
 				}
 				break;
 			case 1: // TMC identification
-				log( "TMC identification code received\n" );
+				LOG( "TMC identification code received\n" );
 				break;
 			case 2: // Paging identification
-				log( "Paging identification code received" );
+				LOG( "Paging identification code received" );
 				break;
 			case 3: // language codes
 				if(slow_labelling < 44) {
-					log( "language: %s" , language_codes[slow_labelling] );
+					LOG( "language: %s" , language_codes[slow_labelling] );
 				} else {
-					log( "language: invalid language code %s" , slow_labelling );
+					LOG( "language: invalid language code %s" , slow_labelling );
 				}
 				break;
 			default:
@@ -260,10 +262,9 @@ void rdsdecoder_decode_type2(unsigned int *group, bool B){
 		rdsdecoder_radiotext[text_segment_address_code * 2    ] = (group[3] >> 8) & 0xff;
 		rdsdecoder_radiotext[text_segment_address_code * 2 + 1] =  group[3]       & 0xff;
 	}
-	log( "Radio Text %s:%.*s" , (radiotext_AB_flag ? 'B' : 'A'),
-		sizeof(radiotext), radiotext )
-		);
-	rdsdecoder_send_message(4, radiotext, sizeof(radiotext));
+	LOG( "Radio Text %s:%.*s" , (rdsdecoder_radiotext_AB_flag ? 'B' : 'A'),
+		sizeof(rdsdecoder_radiotext), rdsdecoder_radiotext );
+	rdsdecoder_send_message(4, rdsdecoder_radiotext, sizeof(rdsdecoder_radiotext));
 }
 
 void rdsdecoder_decode_type3(unsigned int *group, bool B){
@@ -277,7 +278,7 @@ void rdsdecoder_decode_type3(unsigned int *group, bool B){
 	int message           =  group[2];
 	int aid               =  group[3];
 	
-	log( "aid group: %i %s" , application_group , (group_type ? 'B' : 'A'));
+	LOG( "aid group: %i %s" , application_group , (group_type ? 'B' : 'A'));
 	if((application_group == 8) && (group_type == false)) { // 8A
 		int variant_code = (message >> 14) & 0x3;
 		if(variant_code == 0) {
@@ -288,9 +289,9 @@ void rdsdecoder_decode_type3(unsigned int *group, bool B){
 			bool N   = (message >> 2) & 0x1;  // national
 			bool R   = (message >> 1) & 0x1;  // regional
 			bool U   =  message       & 0x1;  // urban
-			log( "location table: %i - %s - %s - %s - %s - %s - %s - aid %i " , ltn,
-				(afi ? "AFI-ON" : "AFI-OFF") ,
-				, (M   ? "enhanced mode" : "basic mode") ,
+			LOG( "location table: %i - %s - %s - %s - %s - %s - %s - aid %i " , ltn,
+				(afi ? "AFI-ON" : "AFI-OFF") 
+				, (M   ? "enhanced mode" : "basic mode")
 				, (I   ? "international " : "")
 				, (N   ? "national " : "")
 				, (R   ? "regional " : "")
@@ -301,10 +302,10 @@ void rdsdecoder_decode_type3(unsigned int *group, bool B){
 			int G   = (message >> 12) & 0x3;  // gap
 			int sid = (message >>  6) & 0x3f; // service identifier
 			int gap_no[4] = {3, 5, 8, 11};
-			log( "gap: %i  groups, SID: %i" , gap_no[G] , sid );;
+			LOG( "gap: %i  groups, SID: %i" , gap_no[G] , sid );;
 		}
 	}
-	log( "message: %s - aid %i" , message , aid );;
+	LOG( "message: %s - aid %i" , message , aid );;
 }
 
 void rdsdecoder_decode_type4(unsigned int *group, bool B){
@@ -322,17 +323,17 @@ void rdsdecoder_decode_type4(unsigned int *group, bool B){
 	}
 	double modified_julian_date = ((group[1] & 0x03) << 15) | ((group[2] >> 1) & 0x7fff);
 
-	unsigned int year  = int((modified_julian_date - 15078.2) / 365.25);
-	unsigned int month = int((modified_julian_date - 14956.1 - int(year * 365.25)) / 30.6001);
-	unsigned int day   =               modified_julian_date - 14956 - int(year * 365.25) - int(month * 30.6001);
+	unsigned int year  = (int)((modified_julian_date - 15078.2) / 365.25);
+	unsigned int month = (int)((modified_julian_date - 14956.1 - (int)(year * 365.25)) / 30.6001);
+	unsigned int day   =               modified_julian_date - 14956 - (int)(year * 365.25) - (int)(month * 30.6001);
 	bool K = ((month == 14) || (month == 15)) ? 1 : 0;
 	year += K;
 	month -= 1 + K * 12;
 
 	char time[25];
-	snprintf(time, sizeof(time), "%02i.%02i.%4i, %02i:%02i (%+.1fh)",
+	snprintf(time, sizeof(time), "%02i.%02i.%4i, %02i:%02i (%+.1fh)"
 		, day , month , (1900 + year) , hours , minutes , local_time_offset);
-	log( "Clocktime: " , time );
+	LOG( "Clocktime: " , time );
 
 	rdsdecoder_send_message(5,time, sizeof(time));
 }
@@ -361,12 +362,12 @@ void rdsdecoder_decode_type8(unsigned int *group, bool B){
 	static int no_groups = 0;
 
 	if(T) { // tuning info
-		log( "#tuning info# ";
+		LOG( "#tuning info# ");
 		int variant = group[1] & 0xf;
 		if((variant > 3) && (variant < 10)) {
-			log( "variant: %i - %i %i" , variant , group[2] , group[3] );
+			LOG( "variant: %i - %i %i" , variant , group[2] , group[3] );
 		} else {
-			log( "invalid variant: %i" , variant );
+			LOG( "invalid variant: %i" , variant );
 		}
 
 	} else if(F || D) { // single-group or 1st of multi-group
@@ -375,30 +376,30 @@ void rdsdecoder_decode_type8(unsigned int *group, bool B){
 		unsigned int extent   = (group[2] >> 11) & 0x7;   // number of segments affected
 		unsigned int event    =  group[2]        & 0x7ff; // event code, defined in ISO 14819-2
 		unsigned int location =  group[3];                // location code, defined in ISO 14819-3
-		log( "#user msg# %s" , (D ? "diversion recommended, " : ""));
+		LOG( "#user msg# %s" , (D ? "diversion recommended, " : ""));
 		if(F) {
-			log( "single-grp, duration: %s" , tmc_duration[dp_ci][0]);
+			LOG( "single-grp, duration: %s" , tmc_duration[dp_ci][0]);
 		} else {
-			log( "multi-grp, continuity index: %i" , dp_ci);
+			LOG( "multi-grp, continuity index: %i" , dp_ci);
 		}
 		int event_line = tmc_event_code_index[event][1];
-		log( ", extent: %s%i segments, event:%s, location:" , (sign ? "-" : "") , extent + 1 ,
-			, event , tmc_events[event_line][1]
+		LOG( ", extent: %s%i segments, event:%s, location:" , (sign ? "-" : "") , extent + 1 ,
+			 event , tmc_events[event_line][1]
 			, location );
 
 	} else { // 2nd or more of multi-group
 		unsigned int ci = group[1] & 0x7;          // countinuity index
 		bool sg = (group[2] >> 14) & 0x1;          // second group
 		unsigned int gsi = (group[2] >> 12) & 0x3; // group sequence
-		log( "#user msg# multi-grp, continuity index: %i %s, gsi:%i" , ci, (sg ? ", second group" : "") , gsi);
-		log( ", free format: %i %i" , (group[2] & 0xfff) , group[3] );
+		LOG( "#user msg# multi-grp, continuity index: %i %s, gsi:%i" , ci, (sg ? ", second group" : "") , gsi);
+		LOG( ", free format: %i %i" , (group[2] & 0xfff) , group[3] );
 		// it's not clear if gsi=N-2 when gs=true
 		if(sg) {
 			no_groups = gsi;
 		}
 		free_format[gsi] = ((group[2] & 0xfff) << 12) | group[3];
 		if(gsi == 0) {
-			decode_optional_content(no_groups, free_format);
+			rdsdecoder_decode_optional_content(no_groups, free_format);
 		}
 	}
 }
@@ -416,8 +417,8 @@ void rdsdecoder_decode_optional_content(int no_groups, unsigned long int *free_f
 			label = (free_format[i] && (0xf << ff_pointer));
 			content_length = optional_content_lengths[label];
 			ff_pointer -= content_length;
-			content = (free_format[i] && (int(pow(2, content_length) - 1) << ff_pointer));
-			log( "TMC optional content (%s):%s" , label_descriptions[label], content );
+			content = (free_format[i] && ((int)(pow(2, content_length) - 1) << ff_pointer));
+			LOG( "TMC optional content (%s):%s" , label_descriptions[label], content );
 		}
 	}
 }
@@ -463,12 +464,12 @@ void rdsdecoder_decode_type14(unsigned int *group, bool B){
 			case 3: // PS(ON)
 				ps_on[variant_code * 2    ] = (information >> 8) & 0xff;
 				ps_on[variant_code * 2 + 1] =  information       & 0xff;
-				log( "PS(ON): ==> %.*s <==" , 8, ps_on) ;
+				LOG( "PS(ON): ==> %.*s <==" , 8, ps_on) ;
 			break;
 			case 4: // AF
 				af_1 = 100.0 * (((information >> 8) & 0xff) + 875);
 				af_2 = 100.0 * ((information & 0xff) + 875);
-				log( "AF:%3.2fMHz %3.2fMHz" , (af_1/1000) , (af_2/1000));
+				LOG( "AF:%3.2fMHz %3.2fMHz" , (af_1/1000) , (af_2/1000));
 			break;
 			case 5: // mapped frequencies
 			case 6: // mapped frequencies
@@ -476,29 +477,28 @@ void rdsdecoder_decode_type14(unsigned int *group, bool B){
 			case 8: // mapped frequencies
 				af_1 = 100.0 * (((information >> 8) & 0xff) + 875);
 				af_2 = 100.0 * ((information & 0xff) + 875);
-				log( "TN:%3.2fMHz - ON:%3.2fMHz" , (af_1/1000) , (af_2/1000));
+				LOG( "TN:%3.2fMHz - ON:%3.2fMHz" , (af_1/1000) , (af_2/1000));
 			break;
 			case 9: // mapped frequencies (AM)
 				af_1 = 100.0 * (((information >> 8) & 0xff) + 875);
 				af_2 = 9.0 * ((information & 0xff) - 16) + 531;
-				log( "TN:%3.2fMHz - ON:%ikHz" , (af_1/1000) , int(af_2));
+				LOG( "TN:%3.2fMHz - ON:%ikHz" , (af_1/1000) , (int)(af_2));
 			break;
 			case 10: // unallocated
 			break;
 			case 11: // unallocated
 			break;
 			case 12: // linkage information
-				log( sprintf("Linkage information: %x%x"
+				LOG( "Linkage information: %x%x"
 					, ((information >> 8) & 0xff) , (information & 0xff));
 			break;
 			case 13: // PTY(ON), TA(ON)
 				ta_on = information & 0x01;
 				pty_on = (information >> 11) & 0x1f;
-				log( "PTY(ON): %s%s" , pty_table[int(pty_on)][pty_locale], (ta_on ?" - TA": ""));;
-				}
+				LOG( "PTY(ON): %s%s" , pty_table[(int)(pty_on)][pty_locale], (ta_on ?" - TA": ""));
 			break;
 			case 14: // PIN(ON)
-				log( sprintf("PIN(ON):%x%x", ((information >> 8) & 0xff) , (information & 0xff));
+				LOG( "PIN(ON):%x%x", ((information >> 8) & 0xff) , (information & 0xff));
 			break;
 			case 15: // Reserved for broadcasters use
 			break;
@@ -508,7 +508,7 @@ void rdsdecoder_decode_type14(unsigned int *group, bool B){
 		}
 	}
 	if (pi_on){
-		log( " PI(ON): %i %s\n" , pi_on, (tp_on ? "-TP-" : ""));
+		LOG( " PI(ON): %i %s\n" , pi_on, (tp_on ? "-TP-" : ""));
 	}
 }
 
@@ -522,76 +522,76 @@ void rdsdecoder_parse(unsigned int* group) {
 	unsigned int group_type = (unsigned int)((group[1] >> 12) & 0xf);
 	bool ab = (group[1] >> 11 ) & 0x1;
 
-	log( %02i%c ", group_type , (ab ? 'B' :'A'));
-	log( "(%s)" , rds_group_acronyms[group_type]);
+	LOG( "%02i%c ", group_type , (ab ? 'B' :'A'));
+	LOG( "(%s)" , rds_group_acronyms[group_type]);
 
 	rdsdecoder_program_identification = group[0];     // "PI"
 	rdsdecoder_program_type = (group[1] >> 5) & 0x1f; // "PTY"
-	int pi_country_identification = (program_identification >> 12) & 0xf;
-	int pi_area_coverage = (program_identification >> 8) & 0xf;
-	unsigned char pi_program_reference_number = program_identification & 0xff;
+	int pi_country_identification = (rdsdecoder_program_identification >> 12) & 0xf;
+	rdsdecoder_pi_area_coverage = (rdsdecoder_program_identification >> 8) & 0xf;
+	rdsdecoder_pi_program_reference_number = rdsdecoder_program_identification & 0xff;
 	char pistring[10];
-	snprintf(pistring, sizeof(pistring), "%04X", program_identification);
+	snprintf(pistring, sizeof(pistring), "%04X", rdsdecoder_program_identification);
 	rdsdecoder_send_message(0, pistring, sizeof(pistring));
 	rdsdecoder_send_message(2, pty_table[program_type][pty_locale], sizeof(pty_table[program_type][pty_locale]));
 
-	log( " - PI: %s - PTY: %s (country: %s/%s/%s/%s/%s, area: %s, program: %s)\n", pistring, pty_table[program_type][pty_locale],
+	LOG( " - PI: %s - PTY: %s (country: %s/%s/%s/%s/%s, area: %s, program: %s)\n", pistring, pty_table[program_type][pty_locale],
 		pi_country_codes[pi_country_identification - 1][0],
 		pi_country_codes[pi_country_identification - 1][1],
 		pi_country_codes[pi_country_identification - 1][2],
 		pi_country_codes[pi_country_identification - 1][3],
 		pi_country_codes[pi_country_identification - 1][4],
-		coverage_area_codes[pi_area_coverage],
-		int(pi_program_reference_number))
+		coverage_area_codes[rdsdecoder_pi_area_coverage],
+		(int)rdsdecoder_pi_program_reference_number);
 
 	switch (group_type) {
 		case 0:
-			decode_type0(group, ab);
+			rdsdecoder_decode_type0(group, ab);
 			break;
 		case 1:
-			decode_type1(group, ab);
+			rdsdecoder_decode_type1(group, ab);
 			break;
 		case 2:
-			decode_type2(group, ab);
+			rdsdecoder_decode_type2(group, ab);
 			break;
 		case 3:
-			decode_type3(group, ab);
+			rdsdecoder_decode_type3(group, ab);
 			break;
 		case 4:
-			decode_type4(group, ab);
+			rdsdecoder_decode_type4(group, ab);
 			break;
 		case 5:
-			decode_type5(group, ab);
+			rdsdecoder_decode_type5(group, ab);
 			break;
 		case 6:
-			decode_type6(group, ab);
+			rdsdecoder_decode_type6(group, ab);
 			break;
 		case 7:
-			decode_type7(group, ab);
+			rdsdecoder_decode_type7(group, ab);
 			break;
 		case 8:
-			decode_type8(group, ab);
+			rdsdecoder_decode_type8(group, ab);
 			break;
 		case 9:
-			decode_type9(group, ab);
+			rdsdecoder_decode_type9(group, ab);
 			break;
 		case 10:
-			decode_type10(group, ab);
+			rdsdecoder_decode_type10(group, ab);
 			break;
 		case 11:
-			decode_type11(group, ab);
+			rdsdecoder_decode_type11(group, ab);
 			break;
 		case 12:
-			decode_type12(group, ab);
+			rdsdecoder_decode_type12(group, ab);
 			break;
 		case 13:
-			decode_type13(group, ab);
+			rdsdecoder_decode_type13(group, ab);
 			break;
 		case 14:
-			decode_type14(group, ab);
+			rdsdecoder_decode_type14(group, ab);
 			break;
 		case 15:
-			decode_type15(group, ab);
+			rdsdecoder_decode_type15(group, ab);
 			break;
 	}
 

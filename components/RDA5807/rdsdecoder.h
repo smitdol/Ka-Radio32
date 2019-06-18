@@ -18,12 +18,12 @@
 #define INCLUDED_RDSDECODER_H
 
 void dout(const char* fmt, ...);
-void log(const char* fmt, ...);
+void LOG(const char* fmt, ...);
 
 void rdsdecoder_parse(unsigned int* group);
 
 void rdsdecoder_reset();
-void rdsdecoder_send_message(long, std::string&);
+void rdsdecoder_send_message(long, char*);
 double rdsdecoder_decode_af(unsigned int);
 void rdsdecoder_decode_optional_content(int, unsigned long int *);
 
