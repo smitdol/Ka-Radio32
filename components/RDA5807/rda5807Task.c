@@ -41,7 +41,6 @@
 #include "rda5807Task.h"
 #include "interface.h"
  
- 
   // ----- actual RDS values
   uint8_t rdsGroupType;
   uint16_t rdsTP, rdsPTY;
@@ -60,11 +59,6 @@ unsigned short pRDSA;
 unsigned short pRDSB;
 unsigned short pRDSC;
 unsigned short pRDSD;
-
- 
- 
- 
- 
  
  // some usefull functions
  //-----------------------
@@ -132,7 +126,6 @@ void rda5807Task(void *pvParams)
 	while (1)
 	{
 		vTaskDelay(10);
-//		RDA5807M_getRDSA(&pRDSA);
 		RDA5807M_isRDSReady(&pFlag);
 		if (pFlag == RDA5807M_TRUE)
 		{
@@ -140,33 +133,19 @@ void rda5807Task(void *pvParams)
 			unsigned char pBLERB;
 			unsigned short pBlock[4];
 			RDA5807M_getBLERA(&pBLERA);
-			RDA5807M_getBLERB(&pBLERB);
-			if ((pBLERA >= 1) || (pBLERB >= 1)) {/*printf("BLE: %x  %x\n",pBLERA,pBLERB);*/continue;}
-			RDA5807M_getRDSA(&pRDSA);
-			//RDA5807M_isBlockEFound(&pFlag);
-			//if (!pFlag) printf("RDSA: %x\n",pRDSA);
-			xSemaphoreTake(semI2C, portMAX_DELAY);
-			RDA5807M_readRegOnly( pBlock,3) ;
+			RDA5807M_getBLERB(&pBLERB); //todo: create overload RDA5807M_getBLER(&pBLERA,&pBLERB);
+			if ((pBLERA >= 1) || (pBLERB >= 1)) {
+				/*printf("BLE: %x  %x\n",pBLERA,pBLERB);*/
+				continue;
+			}
+			RDA5807M_getRDSA(&pRDSA); //RDA5807M_REG_ADDR_0C = 0x0c
+			xSemaphoreTake(semI2C, portMAX_DELAY); // get I2C semaphore
+			RDA5807M_readRegOnly( pBlock,3) ; //makes use of auto incrementing address counter
 			pRDSB = pBlock[0];
 			pRDSC = pBlock[1];
 			pRDSD = pBlock[2];
-/*			
-			pRDSA = pBlock[0];
-			pRDSB = pBlock[1];
-			pRDSC = pBlock[2];
-			pRDSD = pBlock[3];
-*/			
-/*			RDA5807M_readRegOnly( &pRDSB,1) ;
-			RDA5807M_readRegOnly( &pRDSC,1) ;
-			RDA5807M_readRegOnly( &pRDSD,1) ;*/
-			xSemaphoreGive(semI2C);
-/*			RDA5807M_getRDSB(&pRDSB);
-//			printf("RDSB: %x\n",pRDSB);
-			RDA5807M_getRDSC(&pRDSC);
-//			printf("RDSC: %x\n",pRDSC);
-			RDA5807M_getRDSD(&pRDSD);
-//			printf("RDSD: %x\n",pRDSD);
-*/
+			xSemaphoreGive(semI2C); // release I2C semaphore
+
 			processData(pRDSA, pRDSB, pRDSC, pRDSD);
 		}
 
@@ -197,7 +176,7 @@ void processData(unsigned short block1, unsigned short block2, unsigned short bl
 
   if (block1 == 0) {
     // reset all the RDS info.
-	initRds();	
+	rdsdecoder_reset();
 // Send out empty data
 	printf("programServiceName: %s\n",programServiceName);
 	printf("_RDSText: %s\n",_RDSText);
@@ -206,130 +185,19 @@ void processData(unsigned short block1, unsigned short block2, unsigned short bl
     return;
   } // if
 
-  // analyzing Block 2
-  rdsGroupType = 0x0A | ((block2 & 0xF000) >> 8) | ((block2 & 0x0800) >> 11);
-  rdsTP = (block2 & 0x0400);
-  rdsPTY = (block2 & 0x0400);
-
-  switch (rdsGroupType) {
-  case 0x0A:
-  case 0x0B:
-    // The data received is part of the Service Station Name 
-    idx = 2 * (block2 & 0x0003);
-
-    // new data is 2 chars from block 4
-    c1 = block4 >> 8;
-    c2 = block4 & 0x00FF;
-
-    // check that the data was received successfully twice
-    // before publishing the station name
-
-    if ((_PSName1[idx] == c1) && (_PSName1[idx + 1] == c2)) {
-      // retrieved the text a second time: store to _PSName2
-      _PSName2[idx] = c1;
-      _PSName2[idx + 1] = c2;
-      _PSName2[8] = '\0';
-
-      if ((idx == 6) && strcmp(_PSName1, _PSName2) == 0) {
-        if (strcmp(_PSName2, programServiceName) != 0) {
-          // publish station name
-          strcpy(programServiceName, _PSName2);
-		  kprintf("##FM.NAME#: %s\n",programServiceName);
- //         if (_sendServiceName)
- //           _sendServiceName(programServiceName);
-        } // if
-      } // if
-    } // if
-
-    if ((_PSName1[idx] != c1) || (_PSName1[idx + 1] != c2)) {
-      _PSName1[idx] = c1;
-      _PSName1[idx + 1] = c2;
-      _PSName1[8] = '\0';
-      // Serial.println(_PSName1);
-    } // if
-    break;
-
-  case 0x2A:
-    // The data received is part of the RDS Text.
-    _textAB = (block2 & 0x0010);
-    idx = 4 * (block2 & 0x000F);
-
-	
-    if (idx < _lastTextIDX) {
-      // the existing text might be complete because the index is starting at the beginning again.
-      // now send it to the possible listener.
-	  kprintf("##FM.TEXT#: %s\n",_RDSText);
- //     if (_sendText)
- //       _sendText(_RDSText);
-    }
-    _lastTextIDX = idx;
-
-    if (_textAB != _last_textAB) {
-      // when this bit is toggled the whole buffer should be cleared.
-      _last_textAB = _textAB;
-      memset(_RDSText, 0, sizeof(_RDSText));
-      // Serial.println("T>CLEAR");
-    } // if
-
-	
-    // new data is 2 chars from block 3
-    _RDSText[idx] = (block3 >> 8); if(!isprint((int)_RDSText[idx]))  _RDSText[idx]= '_';  idx++;
-    _RDSText[idx] = (block3 & 0x00FF); if(!isprint((int)_RDSText[idx]))  _RDSText[idx]= '_'; idx++;
-
-    // new data is 2 chars from block 4
-    _RDSText[idx] = (block4 >> 8);  if(!isprint((int)_RDSText[idx]))   _RDSText[idx]= '_';    idx++;
-    _RDSText[idx] = (block4 & 0x00FF); if(!isprint((int)_RDSText[idx]))   _RDSText[idx]= '_'; idx++;
-
-    // Serial.print(' '); Serial.println(_RDSText);
-    // Serial.print("T>"); Serial.println(_RDSText);
-    break;
-
-  case 0x4A:
-  /*
-    // Clock time and date
-    off = (block4)& 0x3F; // 6 bits
-    mins = (block4 >> 6) & 0x3F; // 6 bits
-    mins += 60 * (((block3 & 0x0001) << 4) | ((block4 >> 12) & 0x0F));
-
-    // adjust offset
-    if (off & 0x20) {
-      mins -= 30 * (off & 0x1F);
-    } else {
-      mins += 30 * (off & 0x1F);
-    }
-
-    if (//(_sendTime) && 
-		(mins != _lastRDSMinutes)) {
-      _lastRDSMinutes = mins;
- //     _sendTime(mins / 60, mins % 60);
-     printf("TIME: %d:%d\n",mins / 60,mins % 60);
-    } // if
-	*/
-    break;
-
-  case 0x6A:
-    // IH
-    break;
-
-  case 0x8A:
-    // TMC
-    break;
-
-  case 0xAA:
-    // TMC
-    break;
-
-  case 0xCA:
-    // TMC
-    break;
-
-  case 0xEA:
-    // IH
-    break;
-
-  default:
-    // Serial.print("RDS_GRP:"); Serial.println(rdsGroupType, HEX);
-    break;
+  unsigned int group[4];
+  group[0] = block1;
+  group[1] = block2;
+  group[2] = block3;
+  group[3] = block4;
+  
+  //gnuradio
+  rdsdecoder_parse(group);
+  kprintf("##FM.NAME#: %s\n",programServiceName);
+  for (int i=0; i < 6; i++ ){
+		kprintf(message[i]);
   }
+
+
 } // processData()
  
