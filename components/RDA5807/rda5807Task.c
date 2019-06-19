@@ -40,7 +40,8 @@
 #include <stdbool.h>
 #include "rda5807Task.h"
 #include "interface.h"
- 
+#include "rdsdecoder.h" 
+
   // ----- actual RDS values
   uint8_t rdsGroupType;
   uint16_t rdsTP, rdsPTY;

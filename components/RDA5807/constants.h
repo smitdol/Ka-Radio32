@@ -29,7 +29,7 @@ static const char * const offset_name[]={"A","B","C","D","C'"};
 
 /* Annex F of RBDS Standard Table F.1 (North America) and
  * Table F.2 (Europe) */
-const std::string pty_table[32][2]={
+const char* pty_table[32][2]={
 	{"Undefined",             "Undefined"},
 	{"News",                  "News"},
 	{"Current Affairs",       "Information"},
@@ -64,7 +64,7 @@ const std::string pty_table[32][2]={
 	{"Alarm",                 "Emergency"}};
 
 /* page 71, Annex D, table D.1 in the standard */
-const std::string pi_country_codes[15][5]={
+const char* pi_country_codes[15][5]={
 	{"DE","GR","MA","__","MD"},
 	{"DZ","CY","CZ","IE","EE"},
 	{"AD","SM","PL","TR","__"},
@@ -82,7 +82,7 @@ const std::string pi_country_codes[15][5]={
 	{"EG","FR","NO","BY","BA"}};
 
 /* page 72, Annex D, table D.2 in the standard */
-const std::string coverage_area_codes[16]={
+const char* coverage_area_codes[16]={
 	"Local",
 	"International",
 	"National",
@@ -100,7 +100,7 @@ const std::string coverage_area_codes[16]={
 	"Regional 11",
 	"Regional 12"};
 
-const std::string rds_group_acronyms[16]={
+const char* rds_group_acronyms[16]={
 	"BASIC",
 	"PIN/SL",
 	"RT",
@@ -121,7 +121,7 @@ const std::string rds_group_acronyms[16]={
 /* page 74, Annex E, table E.1 in the standard: that's the ASCII table!!! */
 
 /* see page 84, Annex J in the standard */
-const std::string language_codes[44]={
+const char* language_codes[44]={
 	"Unkown/not applicable",
 	"Albanian",
 	"Breton",
@@ -168,7 +168,7 @@ const std::string language_codes[44]={
 	"Walloon"};
 
 /* see page 12 in ISO 14819-1 */
-const std::string tmc_duration[8][2]={
+const char* tmc_duration[8][2]={
 	{"no duration given", "no duration given"},
 	{"15 minutes", "next few hours"},
 	{"30 minutes", "rest of the day"},
@@ -182,7 +182,7 @@ const std::string tmc_duration[8][2]={
  * see page 15 in ISO 14819-1 */
 const int optional_content_lengths[16]={3,3,5,5,5,8,8,8,8,11,16,16,16,16,0,0};
 
-const std::string label_descriptions[16]={
+const char* label_descriptions[16]={
 	"Duration",
 	"Control code",
 	"Length of route affected",

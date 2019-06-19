@@ -23,7 +23,7 @@ void LOG(const char* fmt, ...);
 void rdsdecoder_parse(unsigned int* group);
 
 void rdsdecoder_reset();
-void rdsdecoder_send_message(long, char*);
+void rdsdecoder_send_message(long, char*, int);
 double rdsdecoder_decode_af(unsigned int);
 void rdsdecoder_decode_optional_content(int, unsigned long int *);
 

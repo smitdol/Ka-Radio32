@@ -495,7 +495,7 @@ void rdsdecoder_decode_type14(unsigned int *group, bool B){
 			case 13: // PTY(ON), TA(ON)
 				ta_on = information & 0x01;
 				pty_on = (information >> 11) & 0x1f;
-				LOG( "PTY(ON): %s%s" , pty_table[(int)(pty_on)][pty_locale], (ta_on ?" - TA": ""));
+				LOG( "PTY(ON): %s%s" , pty_table[(int)(pty_on)][rdsdecoder_pty_locale], (ta_on ?" - TA": ""));
 			break;
 			case 14: // PIN(ON)
 				LOG( "PIN(ON):%x%x", ((information >> 8) & 0xff) , (information & 0xff));
@@ -533,9 +533,9 @@ void rdsdecoder_parse(unsigned int* group) {
 	char pistring[10];
 	snprintf(pistring, sizeof(pistring), "%04X", rdsdecoder_program_identification);
 	rdsdecoder_send_message(0, pistring, sizeof(pistring));
-	rdsdecoder_send_message(2, pty_table[program_type][pty_locale], sizeof(pty_table[program_type][pty_locale]));
+	rdsdecoder_send_message(2, pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale], sizeof(pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale]));
 
-	LOG( " - PI: %s - PTY: %s (country: %s/%s/%s/%s/%s, area: %s, program: %s)\n", pistring, pty_table[program_type][pty_locale],
+	LOG( " - PI: %s - PTY: %s (country: %s/%s/%s/%s/%s, area: %s, program: %s)\n", pistring, pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale],
 		pi_country_codes[pi_country_identification - 1][0],
 		pi_country_codes[pi_country_identification - 1][1],
 		pi_country_codes[pi_country_identification - 1][2],

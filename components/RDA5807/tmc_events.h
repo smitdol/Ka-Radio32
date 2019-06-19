@@ -30,7 +30,7 @@
  * 2nd column: text (CEN-English)
  * 3rd column: event code (to be transmitted/received)
  * 4th column: quantifier type */
-static const std::string tmc_events[TMC_EVENTS][4]={
+static const char* tmc_events[TMC_EVENTS][4]={
 	{"0"," "," "," "},
 	{"1"," "," "," "},
 	{"2"," "," "," "},
@@ -3679,7 +3679,7 @@ static const int tmc_event_code_index[TMC_EVENTS][2]={
 
 /* table 1, paragraph 3.1.2, page 4 of ISO 14819-2
  * descriptions of the types of quantifiers */
-const std::string quantifier_types[13][2]={
+const char* quantifier_types[13][2]={
 	{"0", "n (small number)"},
 	{"1", "N (number)"},
 	{"2", "less than V metres"},
