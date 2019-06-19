@@ -516,7 +516,7 @@ void rdsdecoder_decode_type15(unsigned int *group, bool B){
 	dout ( "type 15 not implemented yet" );
 }
 
-void rdsdecoder_parse(unsigned int* group) {
+void rdsdecoder_parse(unsigned short* group) {
 	// TODO: verify offset chars are one of: "ABCD", "ABcD", "EEEE" (in US)
 
 	unsigned int group_type = (unsigned int)((group[1] >> 12) & 0xf);

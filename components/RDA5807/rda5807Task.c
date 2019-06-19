@@ -42,35 +42,14 @@
 #include "interface.h"
 #include "rdsdecoder.h" 
 
-  // ----- actual RDS values
-  uint8_t rdsGroupType;
-  uint16_t rdsTP, rdsPTY;
-  uint8_t _textAB, _last_textAB, _lastTextIDX;
-
-  // Program Service Name
-  char _PSName1[10]; // including trailing '\00' character.
-  char _PSName2[10]; // including trailing '\00' character.
-  char programServiceName[10];    // found station name or empty. Is max. 8 character long.
-
-  uint16_t _lastRDSMinutes; ///< last RDS time send to callback.
-
-  char _RDSText[64 + 2];
- 
 unsigned short pRDSA;
-unsigned short pRDSB;
-unsigned short pRDSC;
-unsigned short pRDSD;
  
- // some usefull functions
- //-----------------------
- // seek up
- void seekUp()
- {
+void seekUp()
+{
 	RDA5807M_seek(true, false);
 	initRds();	
 }
- // seek down
- void seekDown()
+void seekDown()
 {
 	RDA5807M_seek(false, false);
 	initRds();	
@@ -87,21 +66,17 @@ unsigned short pRDSD;
 	} while (!res);
 	return true;
  }
- // get frequency
  float getFrequency()
  {
  		unsigned long freq;
 		RDA5807M_getFreq(&freq);	
-		float temp = (freq)/1000.0; // Calculate freq float in MHz		
+		float temp = (freq)/1000.0;//MHz 		
 		return temp;
 }
  
-////////////////////////////////
-// main task
 void rda5807Task(void *pvParams)
 {
 	RDA5807M_BOOL pFlag;
- // init the FM radio
 	RDA5807M_SETTING rxSetting={
 	.clkSetting={
 		.isClkNoCalb=RDA5807M_FALSE,
@@ -132,9 +107,11 @@ void rda5807Task(void *pvParams)
 		{
 			unsigned char pBLERA;
 			unsigned char pBLERB;
-			unsigned short pBlock[4];
+			unsigned short pBlock[3];
+			unsigned short group[4];
 			RDA5807M_getBLERA(&pBLERA);
-			RDA5807M_getBLERB(&pBLERB); //todo: create overload RDA5807M_getBLER(&pBLERA,&pBLERB);
+			RDA5807M_getBLERB(&pBLERB);
+//todo: create overload RDA5807M_getBLER(&pBLERA,&pBLERB);
 			if ((pBLERA >= 1) || (pBLERB >= 1)) {
 				/*printf("BLE: %x  %x\n",pBLERA,pBLERB);*/
 				continue;
@@ -142,12 +119,13 @@ void rda5807Task(void *pvParams)
 			RDA5807M_getRDSA(&pRDSA); //RDA5807M_REG_ADDR_0C = 0x0c
 			xSemaphoreTake(semI2C, portMAX_DELAY); // get I2C semaphore
 			RDA5807M_readRegOnly( pBlock,3) ; //makes use of auto incrementing address counter
-			pRDSB = pBlock[0];
-			pRDSC = pBlock[1];
-			pRDSD = pBlock[2];
+			group[0]=pRDSA;
+			group[1]=pBlock[0];
+			group[2]=pBlock[1];
+			group[3]=pBlock[2];
 			xSemaphoreGive(semI2C); // release I2C semaphore
 
-			processData(pRDSA, pRDSB, pRDSC, pRDSD);
+			processData(group);
 		}
 
 	}
@@ -155,50 +133,19 @@ void rda5807Task(void *pvParams)
 }
 
 void initRds(){
-    // reset all the RDS info.
-    strcpy(_PSName1, "--------");
-    strcpy(_PSName2, _PSName1);
-    strcpy(programServiceName, "        ");
-    memset(_RDSText, 0, sizeof(_RDSText));
-    _lastTextIDX = 0;
+    rdsdecoder_reset();
 }
 
-void processData(unsigned short block1, unsigned short block2, unsigned short block3, unsigned short block4)
+void processData(unsigned short* block)
 {
-  // DEBUG_FUNC0("process");
-  unsigned char  idx; // index of rdsText
-  char c1, c2;
-//  char *p;
-
-//  unsigned short mins; ///< RDS time in minutes
-//  unsigned char off;   ///< RDS time offset and sign
-
-  // Serial.print('('); Serial.print(block1, HEX); Serial.print(' '); Serial.print(block2, HEX); Serial.print(' '); Serial.print(block3, HEX); Serial.print(' '); Serial.println(block4, HEX);
-
-  if (block1 == 0) {
-    // reset all the RDS info.
+  if (block[0] == 0) {
 	rdsdecoder_reset();
-// Send out empty data
-	printf("programServiceName: %s\n",programServiceName);
-	printf("_RDSText: %s\n",_RDSText);
-//    if (_sendServiceName) _sendServiceName(programServiceName);
-//    if (_sendText)        _sendText("");
-    return;
-  } // if
+	return;
+  } 
 
-  unsigned int group[4];
-  group[0] = block1;
-  group[1] = block2;
-  group[2] = block3;
-  group[3] = block4;
-  
   //gnuradio
-  rdsdecoder_parse(group);
-  kprintf("##FM.NAME#: %s\n",programServiceName);
+  rdsdecoder_parse(block);
   for (int i=0; i < 6; i++ ){
-		kprintf(message[i]);
+	kprintf(message[i]);
   }
-
-
-} // processData()
- 
+}

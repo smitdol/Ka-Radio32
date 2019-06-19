@@ -20,7 +20,7 @@
 void dout(const char* fmt, ...);
 void LOG(const char* fmt, ...);
 
-void rdsdecoder_parse(unsigned int* group);
+void rdsdecoder_parse(unsigned short* group);
 
 void rdsdecoder_reset();
 void rdsdecoder_send_message(long, char*, int);

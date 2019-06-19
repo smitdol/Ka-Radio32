@@ -45,6 +45,6 @@ float getFrequency();
 
 void rda5807Task(void *pvParams);
 void initRds();
-void processData(uint16_t block1, uint16_t block2, uint16_t block3, uint16_t block4);
+void processData(uint16_t *block);
 
 #endif
