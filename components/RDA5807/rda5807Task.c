@@ -107,8 +107,7 @@ void rda5807Task(void *pvParams)
 		{
 			unsigned char pBLERA;
 			unsigned char pBLERB;
-			unsigned short pBlock[3];
-			unsigned short group[4];
+			unsigned short pBlock[4];
 			RDA5807M_getBLERA(&pBLERA);
 			RDA5807M_getBLERB(&pBLERB);
 //todo: create overload RDA5807M_getBLER(&pBLERA,&pBLERB);
@@ -118,14 +117,14 @@ void rda5807Task(void *pvParams)
 			}
 			RDA5807M_getRDSA(&pRDSA); //RDA5807M_REG_ADDR_0C = 0x0c
 			xSemaphoreTake(semI2C, portMAX_DELAY); // get I2C semaphore
-			RDA5807M_readRegOnly( pBlock,3) ; //makes use of auto incrementing address counter
-			group[0]=pRDSA;
-			group[1]=pBlock[0];
-			group[2]=pBlock[1];
-			group[3]=pBlock[2];
+			RDA5807M_readRegOnly(pBlock, 3) ; //makes use of auto incrementing address counter
+			pBlock[3]=pBlock[2];
+			pBlock[2]=pBlock[1];
+			pBlock[1]=pBlock[0];
+			pBlock[0]=pRDSA;
 			xSemaphoreGive(semI2C); // release I2C semaphore
 
-			processData(group);
+			processData(pBlock);
 		}
 
 	}
