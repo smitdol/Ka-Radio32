@@ -36,6 +36,7 @@ void rdsdecoder_reset() {
 	memset(rdsdecoder_af_string,' ', sizeof(rdsdecoder_af_string));
 	for (int i=0; i < 6; i++ ){
 		memset(message[i], ' ', sizeof(message[i]));
+        newmessage[i]=false;
 	}
 
 	rdsdecoder_radiotext_AB_flag              = 0;
@@ -59,12 +60,13 @@ void rdsdecoder_reset() {
  * type 4 = RadioText 
  * type 5 = ClockTime
  * type 6 = Alternative Frequencies */
-void rdsdecoder_send_message(long msgtype, char* msgtext, int len) {
-    strncpy(message[msgtype], msgtext, sizeof(message[msgtype]));
+void rdsdecoder_send_message(long msgtype, const char* msgtext) {
+    strcpy(message[msgtype], msgtext);
+    newmessage[msgtype]=true;
 }
 
 /* BASIC TUNING: see page 21 of the standard */
-void rdsdecoder_decode_type0(unsigned int *group, bool B) {
+void rdsdecoder_decode_type0(short unsigned int *group, bool B) {
 	unsigned int af_code_1 = 0;
 	unsigned int af_code_2 = 0;
 	unsigned int  no_af    = 0;
@@ -152,14 +154,13 @@ void rdsdecoder_decode_type0(unsigned int *group, bool B) {
 	LOG( " - %s " , (rdsdecoder_mono_stereo ? "MONO" : "STEREO"));
 	LOG( " - AF: %s\n" , rdsdecoder_af_string );
 
-	rdsdecoder_send_message(1, rdsdecoder_program_service_name, sizeof(rdsdecoder_program_service_name));
-	rdsdecoder_send_message(3, flagstring, sizeof(flagstring));
-	rdsdecoder_send_message(6, rdsdecoder_af_string, sizeof(rdsdecoder_af_string));
+	rdsdecoder_send_message(1, rdsdecoder_program_service_name);
+	rdsdecoder_send_message(3, flagstring);
+	rdsdecoder_send_message(6, rdsdecoder_af_string);
 	
 }
 
 double rdsdecoder_decode_af(unsigned int af_code) {
-	static unsigned int number_of_freqs = 0;
 	static bool vhf_or_lfmf             = 0; // 0 = vhf, 1 = lf/mf
 	double alt_frequency                = 0; // in kHz
 
@@ -168,16 +169,13 @@ double rdsdecoder_decode_af(unsigned int af_code) {
 		((af_code >= 206) && (af_code <= 223)) || // not assigned
 		( af_code == 224) ||                      // No AF exists
 		( af_code >= 251)) {                      // not assigned
-			number_of_freqs = 0;
 			alt_frequency   = 0;
 	}
 	if((af_code >= 225) && (af_code <= 249)) {        // VHF frequencies follow
-		number_of_freqs = af_code - 224;
 		alt_frequency   = 0;
 		vhf_or_lfmf     = 1;
 	}
 	if(af_code == 250) {                              // an LF/MF frequency follows
-		number_of_freqs = 1;
 		alt_frequency   = 0;
 		vhf_or_lfmf     = 0;
 	}
@@ -192,7 +190,7 @@ double rdsdecoder_decode_af(unsigned int af_code) {
 	return alt_frequency;
 }
 
-void rdsdecoder_decode_type1(unsigned int *group, bool B){
+void rdsdecoder_decode_type1(short unsigned int *group, bool B){
 	int ecc    = 0;
 	int paging = 0;
 	char country_code           = (group[0] >> 12) & 0x0f;
@@ -244,17 +242,17 @@ void rdsdecoder_decode_type1(unsigned int *group, bool B){
 	}
 }
 
-void rdsdecoder_decode_type2(unsigned int *group, bool B){
+void rdsdecoder_decode_type2(short unsigned int *group, bool B){
 	unsigned char text_segment_address_code = group[1] & 0x0f;
 
 	// when the A/B flag is toggled, flush your current radiotext
-	if(rdsdecoder_radiotext_AB_flag != ((group[1] >> 4) & 0x01)) {
+    bool abFlag = ((group[1] >> 4) & 0x01);
+	if(rdsdecoder_radiotext_AB_flag != abFlag) {
 		memset(rdsdecoder_radiotext, ' ', sizeof(rdsdecoder_radiotext));
-	}
-	rdsdecoder_radiotext_AB_flag = (group[1] >> 4) & 0x01;
-
+        rdsdecoder_radiotext_AB_flag = abFlag;	
+    }
 	if(!B) {
-		rdsdecoder_radiotext[text_segment_address_code *4     ] = (group[2] >> 8) & 0xff;
+		rdsdecoder_radiotext[text_segment_address_code * 4    ] = (group[2] >> 8) & 0xff;
 		rdsdecoder_radiotext[text_segment_address_code * 4 + 1] =  group[2]       & 0xff;
 		rdsdecoder_radiotext[text_segment_address_code * 4 + 2] = (group[3] >> 8) & 0xff;
 		rdsdecoder_radiotext[text_segment_address_code * 4 + 3] =  group[3]       & 0xff;
@@ -264,10 +262,10 @@ void rdsdecoder_decode_type2(unsigned int *group, bool B){
 	}
 	LOG( "Radio Text %s:%.*s" , (rdsdecoder_radiotext_AB_flag ? 'B' : 'A'),
 		sizeof(rdsdecoder_radiotext), rdsdecoder_radiotext );
-	rdsdecoder_send_message(4, rdsdecoder_radiotext, sizeof(rdsdecoder_radiotext));
+	rdsdecoder_send_message(4, rdsdecoder_radiotext);
 }
 
-void rdsdecoder_decode_type3(unsigned int *group, bool B){
+void rdsdecoder_decode_type3(short unsigned int *group, bool B){
 	if(B) {
 		dout("type 3B not implemented yet" );
 		return;
@@ -308,7 +306,7 @@ void rdsdecoder_decode_type3(unsigned int *group, bool B){
 	LOG( "message: %s - aid %i" , message , aid );;
 }
 
-void rdsdecoder_decode_type4(unsigned int *group, bool B){
+void rdsdecoder_decode_type4(short unsigned int *group, bool B){
 	if(B) {
 		dout ( "type 4B not implemented yet" );
 		return;
@@ -325,7 +323,7 @@ void rdsdecoder_decode_type4(unsigned int *group, bool B){
 
 	unsigned int year  = (int)((modified_julian_date - 15078.2) / 365.25);
 	unsigned int month = (int)((modified_julian_date - 14956.1 - (int)(year * 365.25)) / 30.6001);
-	unsigned int day   =               modified_julian_date - 14956 - (int)(year * 365.25) - (int)(month * 30.6001);
+	unsigned int day   =        modified_julian_date - 14956 - (int)(year * 365.25) - (int)(month * 30.6001);
 	bool K = ((month == 14) || (month == 15)) ? 1 : 0;
 	year += K;
 	month -= 1 + K * 12;
@@ -335,22 +333,22 @@ void rdsdecoder_decode_type4(unsigned int *group, bool B){
 		, day , month , (1900 + year) , hours , minutes , local_time_offset);
 	LOG( "Clocktime: " , time );
 
-	rdsdecoder_send_message(5,time, sizeof(time));
+	rdsdecoder_send_message(5,time);
 }
 
-void rdsdecoder_decode_type5(unsigned int *group, bool B){
+void rdsdecoder_decode_type5(short unsigned int *group, bool B){
 	 dout( "type 5 not implemented yet" );
 }
 
-void rdsdecoder_decode_type6(unsigned int *group, bool B){
+void rdsdecoder_decode_type6(short unsigned int *group, bool B){
 	dout ( "type 6 not implemented yet" );
 }
 
-void rdsdecoder_decode_type7(unsigned int *group, bool B){
+void rdsdecoder_decode_type7(short unsigned int *group, bool B){
 	dout ( "type 7 not implemented yet" );
 }
 
-void rdsdecoder_decode_type8(unsigned int *group, bool B){
+void rdsdecoder_decode_type8(short unsigned int *group, bool B){
 	if(B) {
 		dout ( "type 8B not implemented yet" );
 		return;
@@ -423,27 +421,27 @@ void rdsdecoder_decode_optional_content(int no_groups, unsigned long int *free_f
 	}
 }
 
-void rdsdecoder_decode_type9(unsigned int *group, bool B){
+void rdsdecoder_decode_type9(short unsigned int *group, bool B){
 	dout ( "type 9 not implemented yet" );
 }
 
-void rdsdecoder_decode_type10(unsigned int *group, bool B){
+void rdsdecoder_decode_type10(short unsigned int *group, bool B){
 	dout ( "type 10 not implemented yet" );
 }
 
-void rdsdecoder_decode_type11(unsigned int *group, bool B){
+void rdsdecoder_decode_type11(short unsigned int *group, bool B){
 	dout ( "type 11 not implemented yet" );
 }
 
-void rdsdecoder_decode_type12(unsigned int *group, bool B){
+void rdsdecoder_decode_type12(short unsigned int *group, bool B){
 	dout ( "type 12 not implemented yet" );
 }
 
-void rdsdecoder_decode_type13(unsigned int *group, bool B){
+void rdsdecoder_decode_type13(short unsigned int *group, bool B){
 	dout ( "type 13 not implemented yet" );
 }
 
-void rdsdecoder_decode_type14(unsigned int *group, bool B){
+void rdsdecoder_decode_type14(short unsigned int *group, bool B){
 	
 	bool tp_on               = (group[1] >> 4) & 0x01;
 	char variant_code        = group[1] & 0x0f;
@@ -512,7 +510,7 @@ void rdsdecoder_decode_type14(unsigned int *group, bool B){
 	}
 }
 
-void rdsdecoder_decode_type15(unsigned int *group, bool B){
+void rdsdecoder_decode_type15(unsigned short *group, bool B){
 	dout ( "type 15 not implemented yet" );
 }
 
@@ -532,8 +530,8 @@ void rdsdecoder_parse(unsigned short* group) {
 	rdsdecoder_pi_program_reference_number = rdsdecoder_program_identification & 0xff;
 	char pistring[10];
 	snprintf(pistring, sizeof(pistring), "%04X", rdsdecoder_program_identification);
-	rdsdecoder_send_message(0, pistring, sizeof(pistring));
-	rdsdecoder_send_message(2, pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale], sizeof(pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale]));
+	rdsdecoder_send_message(0, pistring);
+	rdsdecoder_send_message(2, pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale]);
 
 	LOG( " - PI: %s - PTY: %s (country: %s/%s/%s/%s/%s, area: %s, program: %s)\n", pistring, pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale],
 		pi_country_codes[pi_country_identification - 1][0],

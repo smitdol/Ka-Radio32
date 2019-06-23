@@ -145,6 +145,10 @@ void processData(unsigned short* block)
   //gnuradio
   rdsdecoder_parse(block);
   for (int i=0; i < 6; i++ ){
-	kprintf(message[i]);
+    if (newmessage[i]){
+	   kprintf(message[i]);
+       newmessage[i]=false;
+       memset(message[i], ' ', sizeof(message[i]));
+    }
   }
 }
