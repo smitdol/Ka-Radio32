@@ -63,8 +63,11 @@ bool           rdsdecoder_debug;
 bool           rdsdecoder_log;
 unsigned char  rdsdecoder_pty_locale;
 char           rdsdecoder_af_string[25];
+char           rdsdecoder_tmcprovider[9];
 char           message[7][65];
-bool           newmessage[7];           
+bool           newmessage[7]; 
+
+void makePrintable(const char* str);          
 
 #endif /* INCLUDED_RDSDECODER_H */
 

@@ -14,7 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdio.h>
+/*
+parts from https://github.com/csdexter/RDSDecoder/blob/master/RDSDecoder.cpp
+https://goughlui.com/2016/10/09/experiment-sydney-wfm-broadcast-rds-tmc-rt-acs-audio
+usefull bibliography https://github.com/mmassaki/tcc-kzsh/tree/master/bibliography/iso%2014819
+*/
+ 
+ #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 #include "rdsdecoder.h"
@@ -23,10 +29,17 @@
 #include <math.h>
 
 void dout(const char* fmt, ...) {
-	/* prototype*/
+	va_list argptr;
+    va_start(argptr, format);
+    printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
+    va_end(argptr);
 }
+
 void LOG(const char* fmt, ...) {
-	/* prototype*/
+	va_list argptr;
+    va_start(argptr, format);
+    printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
+    va_end(argptr);
 }
 
 void rdsdecoder_reset() {
@@ -34,6 +47,7 @@ void rdsdecoder_reset() {
 	memset(rdsdecoder_radiotext, ' ', sizeof(rdsdecoder_radiotext));
 	memset(rdsdecoder_program_service_name, '.', sizeof(rdsdecoder_program_service_name));
 	memset(rdsdecoder_af_string,' ', sizeof(rdsdecoder_af_string));
+	memset(rdsdecoder_tmcprovider,0, sizeof(rdsdecoder_tmcprovider));
 	for (int i=0; i < 6; i++ ){
 		memset(message[i], ' ', sizeof(message[i]));
         newmessage[i]=false;
@@ -61,9 +75,11 @@ void rdsdecoder_reset() {
  * type 5 = ClockTime
  * type 6 = Alternative Frequencies */
 void rdsdecoder_send_message(long msgtype, const char* msgtext) {
+	makePrintable(msgtext);
     strcpy(message[msgtype], msgtext);
     newmessage[msgtype]=true;
 }
+
 
 /* BASIC TUNING: see page 21 of the standard */
 void rdsdecoder_decode_type0(short unsigned int *group, bool B) {
@@ -110,7 +126,7 @@ void rdsdecoder_decode_type0(short unsigned int *group, bool B) {
 	flagstring[6] = rdsdecoder_static_pty             ? '1' : '0';
 	
 
-	if(!B) { // type 0A
+	if(!B) { // type 0A contains alternative frequencies in group[2], 0B repeats PI code in group[2]
 		af_code_1 = ((int)group[2] >> 8) & 0xff;
 		af_code_2 = ((int)group[2])      & 0xff;
 		af_1 = rdsdecoder_decode_af(af_code_1);
@@ -208,7 +224,7 @@ void rdsdecoder_decode_type1(short unsigned int *group, bool B){
 		LOG( "program item: %id, %i, %i ", day , hour , minute);
 	}
 
-	if(!B){
+	if(!B){ // 1A contains labeling codes in group[2], 1B repeats PI code in group[2]
 		switch(variant_code){
 			case 0: // paging + ecc
 				paging = (slow_labelling >> 8) & 0x0f;
@@ -266,7 +282,7 @@ void rdsdecoder_decode_type2(short unsigned int *group, bool B){
 }
 
 void rdsdecoder_decode_type3(short unsigned int *group, bool B){
-	if(B) {
+	if(B) { // Open data application
 		dout("type 3B not implemented yet" );
 		return;
 	}
@@ -274,7 +290,7 @@ void rdsdecoder_decode_type3(short unsigned int *group, bool B){
 	int application_group = (group[1] >> 1) & 0xf;
 	int group_type        =  group[1] & 0x1;
 	int message           =  group[2];
-	int aid               =  group[3];
+	int aid               =  group[3]; //application identifier
 	
 	LOG( "aid group: %i %s" , application_group , (group_type ? 'B' : 'A'));
 	if((application_group == 8) && (group_type == false)) { // 8A
@@ -303,11 +319,16 @@ void rdsdecoder_decode_type3(short unsigned int *group, bool B){
 			LOG( "gap: %i  groups, SID: %i" , gap_no[G] , sid );;
 		}
 	}
-	LOG( "message: %s - aid %i" , message , aid );;
+	LOG( "message: %s - aid %i" , message , aid );
+	if (aid == 0xCD46 ) {
+		//ALERT-C
+	} else {if aid == 0x0D45) {
+		//ALERT-C
+	}
 }
 
 void rdsdecoder_decode_type4(short unsigned int *group, bool B){
-	if(B) {
+	if(B) { // Open data application
 		dout ( "type 4B not implemented yet" );
 		return;
 	}
@@ -337,38 +358,68 @@ void rdsdecoder_decode_type4(short unsigned int *group, bool B){
 }
 
 void rdsdecoder_decode_type5(short unsigned int *group, bool B){
+	 //Transparent data channels or ODA
 	 dout( "type 5 not implemented yet" );
 }
 
 void rdsdecoder_decode_type6(short unsigned int *group, bool B){
+	//In-house applications or ODA
 	dout ( "type 6 not implemented yet" );
 }
 
 void rdsdecoder_decode_type7(short unsigned int *group, bool B){
+	//Radio Paging or ODA
 	dout ( "type 7 not implemented yet" );
 }
 
 void rdsdecoder_decode_type8(short unsigned int *group, bool B){
-	if(B) {
+	if(B) { //ODA
 		dout ( "type 8B not implemented yet" );
 		return;
 	}
+	//Traffic Message Channel 
 	bool T = (group[1] >> 4) & 0x1; // 0 = user message, 1 = tuning info
 	bool F = (group[1] >> 3) & 0x1; // 0 = multi-group, 1 = single-group
 	bool D = (group[2] > 15) & 0x1; // 1 = diversion recommended
 	static unsigned long int free_format[4];
 	static int no_groups = 0;
-
-	if(T) { // tuning info
+	bool encrypted = (group[1] & 0x1f) == 0x00;
+	
+	if (encrypted){
+		LOG( "#encrypted TMC# ");
+		bool encryptedAdministrationGroup = (group[2] & 0x3800) == 0x00;
+		if (encryptedAdministrationGroup) {
+			unsigned int encid =  group[2]        & 0x1f; // 5 bits
+			unsigned int sid   = (group[2] >>  5) & 0x3f; // 6 bits
+			unsigned int test  = (group[2] >> 11) & 0x03; // 2 bits; defined in 14819_6
+			unsigned int ltnbe = (group[3] >> 10) & 0x3f; // location table before encryption
+			unsigned int fuzzy = (group[3]        & 0x3ff; // 10 bits
+			LOG("encid %i, sid %i, test %i, ltnbe %i, fuzzy %i", encid, sid, test, ltnbe, fuzzy);
+		} else {
+			//reserved for future use
+		}
+	} else if(T) { // tuning info
 		LOG( "#tuning info# ");
 		int variant = group[1] & 0xf;
 		if((variant > 3) && (variant < 10)) {
 			LOG( "variant: %i - %i %i" , variant , group[2] , group[3] );
+			if ( variant == 4) {
+				rdsdecoder_tmcprovider[0] = (group[2] >> 8) & 0xff;
+				rdsdecoder_tmcprovider[1] =  group[2]       & 0xff;
+				rdsdecoder_tmcprovider[2] = (group[3] >> 8) & 0xff;
+				rdsdecoder_tmcprovider[3] =  group[3]       & 0xff;
+			} else if (variant == 5) {
+				rdsdecoder_tmcprovider[4] = (group[2] >> 8) & 0xff;
+				rdsdecoder_tmcprovider[5] =  group[2]       & 0xff;
+				rdsdecoder_tmcprovider[6] = (group[3] >> 8) & 0xff;
+				rdsdecoder_tmcprovider[7] =  group[3]       & 0xff;
+			}
+			LOG( "tmc provider %s" , rdsdecoder_tmcprovider );
 		} else {
 			LOG( "invalid variant: %i" , variant );
 		}
 
-	} else if(F || D) { // single-group or 1st of multi-group
+	} else if(F || D) { // T=0: User message; single-group or 1st of multi-group
 		unsigned int dp_ci    =  group[1]        & 0x7;   // duration & persistence or continuity index
 		bool sign             = (group[2] >> 14) & 0x1;   // event direction, 0 = +, 1 = -
 		unsigned int extent   = (group[2] >> 11) & 0x7;   // number of segments affected
@@ -422,26 +473,32 @@ void rdsdecoder_decode_optional_content(int no_groups, unsigned long int *free_f
 }
 
 void rdsdecoder_decode_type9(short unsigned int *group, bool B){
+	// Emergency warning systems or ODA
 	dout ( "type 9 not implemented yet" );
 }
 
 void rdsdecoder_decode_type10(short unsigned int *group, bool B){
+	// Programme Type Name (Group type 10A) and Open data (Group type 10B)
 	dout ( "type 10 not implemented yet" );
 }
 
 void rdsdecoder_decode_type11(short unsigned int *group, bool B){
+	//Open Data Application
 	dout ( "type 11 not implemented yet" );
 }
 
 void rdsdecoder_decode_type12(short unsigned int *group, bool B){
+	//Open Data Application
 	dout ( "type 12 not implemented yet" );
 }
 
 void rdsdecoder_decode_type13(short unsigned int *group, bool B){
+	//Enhanced Radio Paging or ODA
 	dout ( "type 13 not implemented yet" );
 }
 
 void rdsdecoder_decode_type14(short unsigned int *group, bool B){
+	//Enhanced Other Networks information
 	
 	bool tp_on               = (group[1] >> 4) & 0x01;
 	char variant_code        = group[1] & 0x0f;
@@ -511,6 +568,7 @@ void rdsdecoder_decode_type14(short unsigned int *group, bool B){
 }
 
 void rdsdecoder_decode_type15(unsigned short *group, bool B){
+	// Fast basic tuning and switching information
 	dout ( "type 15 not implemented yet" );
 }
 
@@ -596,3 +654,55 @@ void rdsdecoder_parse(unsigned short* group) {
 	dout ( " %04X %04X %04X %04X\n" , group[0], group[1], group[2], group[3]);
 }
 
+//makeprintable from https://github.com/csdexter/RDSDecoder
+# define pgm_read_byte(x) (uint8_t)(*x)
+
+const char PROGMEM RDS2LCD_S[] = "\xE1\xE0\xE9\xE8\xED\xEE\xF3\xF2\xFA\xF9\xD1"
+                                 "\xC7S\xDF\xA1J\xE2\xE4\xEA\xEB\xEE\xEF\xF4"
+                                 "\xF6\xFB\xFC\xF1\xE7sgij\xAA\x90\xA9%Gen\xF6"
+                                 "\x93""E\xA3$\x1B\x18\x1A\x19\xBA\xB9\xB2\xB3"
+                                 "\xB1In\xFC\xB5\xBF\xF7\xB0\xBC\xBD\xBE\xA7"
+                                 "\xC1\xC0\xC9\xC8\xCD\xCE\xD3\xD2\xDA\xD9RCSZ"
+                                 "\xD0L\xC2\xC4\xCA\xCB\xCE\xCF\xD4\xD6\xDB\xDC"
+                                 "rcsz\xF0l\xC3\xC5\xC6Oy\xDD\xD5""0\xDEGRCSZT"
+								 "\xF0\xE3\xE5\xE6ow\xF5""0\xFEgrcszt";
+								 
+void makePrintable(const char* str) {
+	for(byte i = 0; i < strlen(str); i++) {
+        if(str[i] == 0x0D) {
+			// CR ends the string, according to RDS 6.1.5.3
+            str[i] = '\0';
+            break;
+        }
+        // 0x80: a-acute, a-grave, e-acute, e-grave, i-acute, i-grave, o-acute,
+        //       o-grave, u-acute, u-grave, N-tilde, C-cedilla, S-cedilla,
+        //       scharfes-es, spanish-exclamation, dutch-IJ, a-circ, a-umlaut,
+        //       e-circ, e-umlaut, i-circ, i-umlaut, o-circ, o-umlaut, u-circ,
+        //       u-umlaut, n-tilde, c-cedilla, s-cedilla, g-breve,
+        //       turkish-i-nodot, dutch-ij, a-superscript, alpha, (c), permille,
+        //       G-breve, e-caron, n-caron, o-dprime, pi, EUR, GBP, USD, 
+        //       arrow-left, arrow-up, arrow-right, arrow-down, o-superscript,
+        //       1-superscript, 2-superscript, 3-superscript, +/-,
+        //       turkish-I-dot, n-acute, u-dprime, miu, spanish-question,
+        //       division, degree, 1/4, 1/2, 3/4, paragraph,
+        //       A,E,I,O,U{acute,grave}, R,C,S,Z{caron}, D-line, L-dot,
+        //       A,E,I,O,U{circ,umlaut}, r,c,s,z{caron}, d-line, l-dot,
+        //       A-tilde, A-circle, AE, OE, y-circ, Y-acute, O-tilde, O-slash,
+        //       Thorn, NG, R,C,S,Z{acute}, T-bar, th, a-tilde, a-circle, ae,
+        //       oe, w-circ, o-tilde, o-slash, thorn, ng, r,c,s,z{acute}, t-bar
+        if(str[i] == 0x0A || str[i] == 0x0B || str[i] == 0x1F)
+            //LF, VT and US are allowed as a control characters. The first with
+            //the same meaning as on UNIX, second as end-of-headline indicator
+            continue;
+        //Any other control character is an undetected error on the receiving
+        //side (because the manufacturers of the RDS decoder chip were too cheap
+        //to properly implement the ECC in the standard).
+        if(str[i] < 32) str[i] = '?';
+        else if(str[i] == 0x24) str[i] = '\xA4';
+        else if(str[i] == 0x5E) str[i] = '-';
+        else if(str[i] == 0x60) str[i] = '\xA0';
+        else if(str[i] == 0x7E) str[i] = '_';
+        else if(str[i] >= 0x80)
+            str[i] = (char)pgm_read_byte(&RDS2LCD_S[str[i] - 0x80]);
+	}
+}
