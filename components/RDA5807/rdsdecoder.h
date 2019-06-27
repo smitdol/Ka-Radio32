@@ -67,7 +67,7 @@ char           rdsdecoder_tmcprovider[9];
 char           message[7][65];
 bool           newmessage[7]; 
 
-void makePrintable(const char* str);          
+void makePrintable(char* str);          
 
 #endif /* INCLUDED_RDSDECODER_H */
 

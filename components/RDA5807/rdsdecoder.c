@@ -20,7 +20,8 @@ https://goughlui.com/2016/10/09/experiment-sydney-wfm-broadcast-rds-tmc-rt-acs-a
 usefull bibliography https://github.com/mmassaki/tcc-kzsh/tree/master/bibliography/iso%2014819
 */
  
- #include <stdio.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 #include "rdsdecoder.h"
@@ -28,15 +29,15 @@ usefull bibliography https://github.com/mmassaki/tcc-kzsh/tree/master/bibliograp
 #include "tmc_events.h"
 #include <math.h>
 
-void dout(const char* fmt, ...) {
-	va_list argptr;
+void dout(const char* format, ...) {
+    va_list argptr;
     va_start(argptr, format);
     printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
     va_end(argptr);
 }
 
-void LOG(const char* fmt, ...) {
-	va_list argptr;
+void LOG(const char* format, ...) {
+    va_list argptr;
     va_start(argptr, format);
     printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
     va_end(argptr);
@@ -75,8 +76,8 @@ void rdsdecoder_reset() {
  * type 5 = ClockTime
  * type 6 = Alternative Frequencies */
 void rdsdecoder_send_message(long msgtype, const char* msgtext) {
-	makePrintable(msgtext);
     strcpy(message[msgtype], msgtext);
+    makePrintable(message[msgtype]);
     newmessage[msgtype]=true;
 }
 
@@ -322,7 +323,7 @@ void rdsdecoder_decode_type3(short unsigned int *group, bool B){
 	LOG( "message: %s - aid %i" , message , aid );
 	if (aid == 0xCD46 ) {
 		//ALERT-C
-	} else {if aid == 0x0D45) {
+	} else if (aid == 0x0D45) {
 		//ALERT-C
 	}
 }
@@ -393,7 +394,7 @@ void rdsdecoder_decode_type8(short unsigned int *group, bool B){
 			unsigned int sid   = (group[2] >>  5) & 0x3f; // 6 bits
 			unsigned int test  = (group[2] >> 11) & 0x03; // 2 bits; defined in 14819_6
 			unsigned int ltnbe = (group[3] >> 10) & 0x3f; // location table before encryption
-			unsigned int fuzzy = (group[3]        & 0x3ff; // 10 bits
+			unsigned int fuzzy =  group[3]        & 0x3ff; // 10 bits
 			LOG("encid %i, sid %i, test %i, ltnbe %i, fuzzy %i", encid, sid, test, ltnbe, fuzzy);
 		} else {
 			//reserved for future use
@@ -655,9 +656,9 @@ void rdsdecoder_parse(unsigned short* group) {
 }
 
 //makeprintable from https://github.com/csdexter/RDSDecoder
-# define pgm_read_byte(x) (uint8_t)(*x)
+#define pgm_read_byte(x) (char)(*x)
 
-const char PROGMEM RDS2LCD_S[] = "\xE1\xE0\xE9\xE8\xED\xEE\xF3\xF2\xFA\xF9\xD1"
+const char RDS2LCD_S[] = "\xE1\xE0\xE9\xE8\xED\xEE\xF3\xF2\xFA\xF9\xD1"
                                  "\xC7S\xDF\xA1J\xE2\xE4\xEA\xEB\xEE\xEF\xF4"
                                  "\xF6\xFB\xFC\xF1\xE7sgij\xAA\x90\xA9%Gen\xF6"
                                  "\x93""E\xA3$\x1B\x18\x1A\x19\xBA\xB9\xB2\xB3"
@@ -667,8 +668,8 @@ const char PROGMEM RDS2LCD_S[] = "\xE1\xE0\xE9\xE8\xED\xEE\xF3\xF2\xFA\xF9\xD1"
                                  "rcsz\xF0l\xC3\xC5\xC6Oy\xDD\xD5""0\xDEGRCSZT"
 								 "\xF0\xE3\xE5\xE6ow\xF5""0\xFEgrcszt";
 								 
-void makePrintable(const char* str) {
-	for(byte i = 0; i < strlen(str); i++) {
+void makePrintable(char* str) {
+	for(int i = 0; i < strlen(str); i++) {
         if(str[i] == 0x0D) {
 			// CR ends the string, according to RDS 6.1.5.3
             str[i] = '\0';
