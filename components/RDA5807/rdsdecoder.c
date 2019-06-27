@@ -30,17 +30,17 @@ usefull bibliography https://github.com/mmassaki/tcc-kzsh/tree/master/bibliograp
 #include <math.h>
 
 void dout(const char* format, ...) {
-    va_list argptr;
-    va_start(argptr, format);
-    printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
-    va_end(argptr);
+//    va_list argptr;
+//    va_start(argptr, format);
+//    printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
+//    va_end(argptr);
 }
 
 void LOG(const char* format, ...) {
-    va_list argptr;
-    va_start(argptr, format);
-    printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
-    va_end(argptr);
+//    va_list argptr;
+//    va_start(argptr, format);
+//    printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
+//    va_end(argptr);
 }
 
 void rdsdecoder_reset() {
@@ -76,7 +76,7 @@ void rdsdecoder_reset() {
  * type 5 = ClockTime
  * type 6 = Alternative Frequencies */
 void rdsdecoder_send_message(long msgtype, const char* msgtext) {
-    strcpy(message[msgtype], msgtext);
+    strncpy(message[msgtype], msgtext, sizeof(message[msgtype]));
     makePrintable(message[msgtype]);
     newmessage[msgtype]=true;
 }
@@ -169,7 +169,7 @@ void rdsdecoder_decode_type0(short unsigned int *group, bool B) {
 	LOG( " - %s " , (rdsdecoder_traffic_announcement ? "TA" : "  "));
 	LOG( " - %s " , (rdsdecoder_music_speech ? "Music" : "Speech"));
 	LOG( " - %s " , (rdsdecoder_mono_stereo ? "MONO" : "STEREO"));
-	LOG( " - AF: %s\n" , rdsdecoder_af_string );
+	LOG( " - AF: %.*s\n" , sizeof(rdsdecoder_af_string),rdsdecoder_af_string );
 
 	rdsdecoder_send_message(1, rdsdecoder_program_service_name);
 	rdsdecoder_send_message(3, flagstring);
@@ -415,7 +415,7 @@ void rdsdecoder_decode_type8(short unsigned int *group, bool B){
 				rdsdecoder_tmcprovider[6] = (group[3] >> 8) & 0xff;
 				rdsdecoder_tmcprovider[7] =  group[3]       & 0xff;
 			}
-			LOG( "tmc provider %s" , rdsdecoder_tmcprovider );
+			LOG( "tmc provider %.*s" , sizeof(rdsdecoder_tmcprovider), rdsdecoder_tmcprovider );
 		} else {
 			LOG( "invalid variant: %i" , variant );
 		}
