@@ -28,20 +28,10 @@ usefull bibliography https://github.com/mmassaki/tcc-kzsh/tree/master/bibliograp
 #include "constants.h"
 #include "tmc_events.h"
 #include <math.h>
+#include <esp_log.h>
 
-void dout(const char* format, ...) {
-//    va_list argptr;
-//    va_start(argptr, format);
-//    printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
-//    va_end(argptr);
-}
-
-void LOG(const char* format, ...) {
-//    va_list argptr;
-//    va_start(argptr, format);
-//    printf(format, argptr); //  The Print stream is configured to the UART0 of the ESP32. ?
-//    va_end(argptr);
-}
+#define dout printf
+#define LOG printf
 
 void rdsdecoder_reset() {
 
@@ -164,7 +154,7 @@ void rdsdecoder_decode_type0(short unsigned int *group, bool B) {
 		}
 	}
 
-	LOG( "==> %.*s" , 8, rdsdecoder_program_service_name, 8);
+	LOG( "==> %.*s" , 8, rdsdecoder_program_service_name);
 	LOG( "<== - %s" , (rdsdecoder_traffic_program ? "TP" : "  "));
 	LOG( " - %s " , (rdsdecoder_traffic_announcement ? "TA" : "  "));
 	LOG( " - %s " , (rdsdecoder_music_speech ? "Music" : "Speech"));
@@ -250,7 +240,7 @@ void rdsdecoder_decode_type1(short unsigned int *group, bool B){
 				if(slow_labelling < 44) {
 					LOG( "language: %s" , language_codes[slow_labelling] );
 				} else {
-					LOG( "language: invalid language code %s" , slow_labelling );
+					LOG( "language: invalid language code %i" , slow_labelling );
 				}
 				break;
 			default:
@@ -277,7 +267,7 @@ void rdsdecoder_decode_type2(short unsigned int *group, bool B){
 		rdsdecoder_radiotext[text_segment_address_code * 2    ] = (group[3] >> 8) & 0xff;
 		rdsdecoder_radiotext[text_segment_address_code * 2 + 1] =  group[3]       & 0xff;
 	}
-	LOG( "Radio Text %s:%.*s" , (rdsdecoder_radiotext_AB_flag ? 'B' : 'A'),
+	LOG( "Radio Text %c:%.*s" , (rdsdecoder_radiotext_AB_flag ? 'B' : 'A'),
 		sizeof(rdsdecoder_radiotext), rdsdecoder_radiotext );
 	rdsdecoder_send_message(4, rdsdecoder_radiotext);
 }
@@ -293,7 +283,7 @@ void rdsdecoder_decode_type3(short unsigned int *group, bool B){
 	int message           =  group[2];
 	int aid               =  group[3]; //application identifier
 	
-	LOG( "aid group: %i %s" , application_group , (group_type ? 'B' : 'A'));
+	LOG( "aid group: %i %c" , application_group , (group_type ? 'B' : 'A'));
 	if((application_group == 8) && (group_type == false)) { // 8A
 		int variant_code = (message >> 14) & 0x3;
 		if(variant_code == 0) {
@@ -320,7 +310,7 @@ void rdsdecoder_decode_type3(short unsigned int *group, bool B){
 			LOG( "gap: %i  groups, SID: %i" , gap_no[G] , sid );;
 		}
 	}
-	LOG( "message: %s - aid %i" , message , aid );
+	LOG( "message: %i - aid %0xi" , message , aid );
 	if (aid == 0xCD46 ) {
 		//ALERT-C
 	} else if (aid == 0x0D45) {
@@ -353,7 +343,7 @@ void rdsdecoder_decode_type4(short unsigned int *group, bool B){
 	char time[25];
 	snprintf(time, sizeof(time), "%02i.%02i.%4i, %02i:%02i (%+.1fh)"
 		, day , month , (1900 + year) , hours , minutes , local_time_offset);
-	LOG( "Clocktime: " , time );
+	LOG( "Clocktime: %s", time );
 
 	rdsdecoder_send_message(5,time);
 }
@@ -433,7 +423,7 @@ void rdsdecoder_decode_type8(short unsigned int *group, bool B){
 			LOG( "multi-grp, continuity index: %i" , dp_ci);
 		}
 		int event_line = tmc_event_code_index[event][1];
-		LOG( ", extent: %s%i segments, event:%s, location:" , (sign ? "-" : "") , extent + 1 ,
+LOG( ", extent: %s%i segments, event:%i %s, location: %i" , (sign ? "-" : "") , extent + 1 ,
 			 event , tmc_events[event_line][1]
 			, location );
 
@@ -468,7 +458,7 @@ void rdsdecoder_decode_optional_content(int no_groups, unsigned long int *free_f
 			content_length = optional_content_lengths[label];
 			ff_pointer -= content_length;
 			content = (free_format[i] && ((int)(pow(2, content_length) - 1) << ff_pointer));
-			LOG( "TMC optional content (%s):%s" , label_descriptions[label], content );
+			LOG( "TMC optional content (%s):%i" , label_descriptions[label], content );
 		}
 	}
 }
@@ -592,7 +582,7 @@ void rdsdecoder_parse(unsigned short* group) {
 	rdsdecoder_send_message(0, pistring);
 	rdsdecoder_send_message(2, pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale]);
 
-	LOG( " - PI: %s - PTY: %s (country: %s/%s/%s/%s/%s, area: %s, program: %s)\n", pistring, pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale],
+	LOG( " - PI: %s - PTY: %s (country: %s/%s/%s/%s/%s, area: %s, program: %i)\n", pistring, pty_table[rdsdecoder_program_type][rdsdecoder_pty_locale],
 		pi_country_codes[pi_country_identification - 1][0],
 		pi_country_codes[pi_country_identification - 1][1],
 		pi_country_codes[pi_country_identification - 1][2],
