@@ -30,9 +30,10 @@ usefull bibliography https://github.com/mmassaki/tcc-kzsh/tree/master/bibliograp
 #include <math.h>
 #include <esp_log.h>
 
-#define dout printf
-#define LOG printf
-
+//#define dout printf
+#define LOGi printf
+void dout(const char* fmt, ...) {}
+void LOG(const char* fmt, ...) {}
 void rdsdecoder_reset() {
 
 	memset(rdsdecoder_radiotext, ' ', sizeof(rdsdecoder_radiotext));
@@ -73,7 +74,7 @@ void rdsdecoder_send_message(long msgtype, const char* msgtext) {
 
 
 /* BASIC TUNING: see page 21 of the standard */
-void rdsdecoder_decode_type0(short unsigned int *group, bool B) {
+void rdsdecoder_decode_type0(unsigned short *group, bool B) {
 	unsigned int af_code_1 = 0;
 	unsigned int af_code_2 = 0;
 	unsigned int  no_af    = 0;
@@ -197,7 +198,7 @@ double rdsdecoder_decode_af(unsigned int af_code) {
 	return alt_frequency;
 }
 
-void rdsdecoder_decode_type1(short unsigned int *group, bool B){
+void rdsdecoder_decode_type1(unsigned short *group, bool B){
 	int ecc    = 0;
 	int paging = 0;
 	char country_code           = (group[0] >> 12) & 0x0f;
@@ -249,7 +250,7 @@ void rdsdecoder_decode_type1(short unsigned int *group, bool B){
 	}
 }
 
-void rdsdecoder_decode_type2(short unsigned int *group, bool B){
+void rdsdecoder_decode_type2(unsigned short *group, bool B){
 	unsigned char text_segment_address_code = group[1] & 0x0f;
 
 	// when the A/B flag is toggled, flush your current radiotext
@@ -272,7 +273,7 @@ void rdsdecoder_decode_type2(short unsigned int *group, bool B){
 	rdsdecoder_send_message(4, rdsdecoder_radiotext);
 }
 
-void rdsdecoder_decode_type3(short unsigned int *group, bool B){
+void rdsdecoder_decode_type3(unsigned short *group, bool B){
 	if(B) { // Open data application
 		dout("type 3B not implemented yet" );
 		return;
@@ -318,21 +319,23 @@ void rdsdecoder_decode_type3(short unsigned int *group, bool B){
 	}
 }
 
-void rdsdecoder_decode_type4(short unsigned int *group, bool B){
+void rdsdecoder_decode_type4(unsigned short *group, bool B){
 	if(B) { // Open data application
 		dout ( "type 4B not implemented yet" );
 		return;
 	}
-
-	unsigned int hours   = ((group[2] & 0x1) << 4) | ((group[3] >> 12) & 0x0f);
+	LOGi("\nClocktime:\t%i\t%i\t%i", group[1], group[2], group[3]);
+	double modified_julian_date = (group[1] & 0x03) *2^15;
+    modified_julian_date += ((group[2] >> 1) & 0x7fff);
+    
+    unsigned int hours   = ((group[2] & 0x1) << 4) | ((group[3] >> 12) & 0x0f);
 	unsigned int minutes =  (group[3] >> 6) & 0x3f;
 	double local_time_offset = .5 * (group[3] & 0x1f);
 
 	if((group[3] >> 5) & 0x1) {
 		local_time_offset *= -1;
 	}
-	double modified_julian_date = ((group[1] & 0x03) << 15) | ((group[2] >> 1) & 0x7fff);
-
+	
 	unsigned int year  = (int)((modified_julian_date - 15078.2) / 365.25);
 	unsigned int month = (int)((modified_julian_date - 14956.1 - (int)(year * 365.25)) / 30.6001);
 	unsigned int day   =        modified_julian_date - 14956 - (int)(year * 365.25) - (int)(month * 30.6001);
@@ -340,30 +343,30 @@ void rdsdecoder_decode_type4(short unsigned int *group, bool B){
 	year += K;
 	month -= 1 + K * 12;
 
-	char time[25];
+	char time[30];
 	snprintf(time, sizeof(time), "%02i.%02i.%4i, %02i:%02i (%+.1fh)"
 		, day , month , (1900 + year) , hours , minutes , local_time_offset);
-	LOG( "Clocktime: %s", time );
+	LOGi("\t%f\t%s\n",modified_julian_date, time );
 
 	rdsdecoder_send_message(5,time);
 }
 
-void rdsdecoder_decode_type5(short unsigned int *group, bool B){
+void rdsdecoder_decode_type5(unsigned short *group, bool B){
 	 //Transparent data channels or ODA
 	 dout( "type 5 not implemented yet" );
 }
 
-void rdsdecoder_decode_type6(short unsigned int *group, bool B){
+void rdsdecoder_decode_type6(unsigned short *group, bool B){
 	//In-house applications or ODA
 	dout ( "type 6 not implemented yet" );
 }
 
-void rdsdecoder_decode_type7(short unsigned int *group, bool B){
+void rdsdecoder_decode_type7(unsigned short *group, bool B){
 	//Radio Paging or ODA
 	dout ( "type 7 not implemented yet" );
 }
 
-void rdsdecoder_decode_type8(short unsigned int *group, bool B){
+void rdsdecoder_decode_type8(unsigned short *group, bool B){
 	if(B) { //ODA
 		dout ( "type 8B not implemented yet" );
 		return;
@@ -377,7 +380,7 @@ void rdsdecoder_decode_type8(short unsigned int *group, bool B){
 	bool encrypted = (group[1] & 0x1f) == 0x00;
 	
 	if (encrypted){
-		LOG( "#encrypted TMC# ");
+		LOG( "#encrypted TMC#\n");
 		bool encryptedAdministrationGroup = (group[2] & 0x3800) == 0x00;
 		if (encryptedAdministrationGroup) {
 			unsigned int encid =  group[2]        & 0x1f; // 5 bits
@@ -385,7 +388,7 @@ void rdsdecoder_decode_type8(short unsigned int *group, bool B){
 			unsigned int test  = (group[2] >> 11) & 0x03; // 2 bits; defined in 14819_6
 			unsigned int ltnbe = (group[3] >> 10) & 0x3f; // location table before encryption
 			unsigned int fuzzy =  group[3]        & 0x3ff; // 10 bits
-			LOG("encid %i, sid %i, test %i, ltnbe %i, fuzzy %i", encid, sid, test, ltnbe, fuzzy);
+			LOG("encid %i, sid %i, test %i, ltnbe %i, fuzzy %i\n", encid, sid, test, ltnbe, fuzzy);
 		} else {
 			//reserved for future use
 		}
@@ -416,11 +419,11 @@ void rdsdecoder_decode_type8(short unsigned int *group, bool B){
 		unsigned int extent   = (group[2] >> 11) & 0x7;   // number of segments affected
 		unsigned int event    =  group[2]        & 0x7ff; // event code, defined in ISO 14819-2
 		unsigned int location =  group[3];                // location code, defined in ISO 14819-3
-		LOG( "#user msg# %s" , (D ? "diversion recommended, " : ""));
+		LOG( "#user msg# %s\n" , (D ? "diversion recommended, " : ""));
 		if(F) {
-			LOG( "single-grp, duration: %s" , tmc_duration[dp_ci][0]);
+			LOG( "single-grp, duration: %s\n" , tmc_duration[dp_ci][0]);
 		} else {
-			LOG( "multi-grp, continuity index: %i" , dp_ci);
+			LOG( "multi-grp, continuity index: %i\n" , dp_ci);
 		}
 		int event_line = tmc_event_code_index[event][1];
 LOG( ", extent: %s%i segments, event:%i %s, location: %i" , (sign ? "-" : "") , extent + 1 ,
@@ -431,8 +434,8 @@ LOG( ", extent: %s%i segments, event:%i %s, location: %i" , (sign ? "-" : "") , 
 		unsigned int ci = group[1] & 0x7;          // countinuity index
 		bool sg = (group[2] >> 14) & 0x1;          // second group
 		unsigned int gsi = (group[2] >> 12) & 0x3; // group sequence
-		LOG( "#user msg# multi-grp, continuity index: %i %s, gsi:%i" , ci, (sg ? ", second group" : "") , gsi);
-		LOG( ", free format: %i %i" , (group[2] & 0xfff) , group[3] );
+		LOG( "#user msg# multi-grp, continuity index: %i %s, gsi:%i\n" , ci, (sg ? ", second group" : "") , gsi);
+		LOG( ", free format: %i %i\n" , (group[2] & 0xfff) , group[3] );
 		// it's not clear if gsi=N-2 when gs=true
 		if(sg) {
 			no_groups = gsi;
@@ -458,37 +461,37 @@ void rdsdecoder_decode_optional_content(int no_groups, unsigned long int *free_f
 			content_length = optional_content_lengths[label];
 			ff_pointer -= content_length;
 			content = (free_format[i] && ((int)(pow(2, content_length) - 1) << ff_pointer));
-			LOG( "TMC optional content (%s):%i" , label_descriptions[label], content );
+			LOG( "TMC optional content (%s):%i\n" , label_descriptions[label], content );
 		}
 	}
 }
 
-void rdsdecoder_decode_type9(short unsigned int *group, bool B){
+void rdsdecoder_decode_type9(unsigned short *group, bool B){
 	// Emergency warning systems or ODA
 	dout ( "type 9 not implemented yet" );
 }
 
-void rdsdecoder_decode_type10(short unsigned int *group, bool B){
+void rdsdecoder_decode_type10(unsigned short *group, bool B){
 	// Programme Type Name (Group type 10A) and Open data (Group type 10B)
 	dout ( "type 10 not implemented yet" );
 }
 
-void rdsdecoder_decode_type11(short unsigned int *group, bool B){
+void rdsdecoder_decode_type11(unsigned short *group, bool B){
 	//Open Data Application
 	dout ( "type 11 not implemented yet" );
 }
 
-void rdsdecoder_decode_type12(short unsigned int *group, bool B){
+void rdsdecoder_decode_type12(unsigned short *group, bool B){
 	//Open Data Application
 	dout ( "type 12 not implemented yet" );
 }
 
-void rdsdecoder_decode_type13(short unsigned int *group, bool B){
+void rdsdecoder_decode_type13(unsigned short *group, bool B){
 	//Enhanced Radio Paging or ODA
 	dout ( "type 13 not implemented yet" );
 }
 
-void rdsdecoder_decode_type14(short unsigned int *group, bool B){
+void rdsdecoder_decode_type14(unsigned short *group, bool B){
 	//Enhanced Other Networks information
 	
 	bool tp_on               = (group[1] >> 4) & 0x01;
@@ -563,7 +566,7 @@ void rdsdecoder_decode_type15(unsigned short *group, bool B){
 	dout ( "type 15 not implemented yet" );
 }
 
-void rdsdecoder_parse(unsigned short* group) {
+void rdsdecoder_parse(unsigned short *group) {
 	// TODO: verify offset chars are one of: "ABCD", "ABcD", "EEEE" (in US)
 
 	unsigned int group_type = (unsigned int)((group[1] >> 12) & 0xf);

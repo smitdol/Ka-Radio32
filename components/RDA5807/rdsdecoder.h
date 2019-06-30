@@ -18,31 +18,32 @@
 #define INCLUDED_RDSDECODER_H
 
 void dout(const char* fmt, ...);
+void LOGi(const char* fmt, ...);
 void LOG(const char* fmt, ...);
 
-void rdsdecoder_parse(unsigned short* group);
+void rdsdecoder_parse(unsigned short *group);
 
 void rdsdecoder_reset();
 void rdsdecoder_send_message(long, const char*);
 double rdsdecoder_decode_af(unsigned int);
 void rdsdecoder_decode_optional_content(int, unsigned long int *);
 
-void rdsdecoder_decode_type0(unsigned short* group, bool B);
-void rdsdecoder_decode_type1(unsigned short* group, bool B);
-void rdsdecoder_decode_type2(unsigned short* group, bool B);
-void rdsdecoder_decode_type3(unsigned short* group, bool B);
-void rdsdecoder_decode_type4(unsigned short* group, bool B);
-void rdsdecoder_decode_type5(unsigned short* group, bool B);
-void rdsdecoder_decode_type6(unsigned short* group, bool B);
-void rdsdecoder_decode_type7(unsigned short* group, bool B);
-void rdsdecoder_decode_type8(unsigned short* group, bool B);
-void rdsdecoder_decode_type9(unsigned short* group, bool B);
-void rdsdecoder_decode_type10(unsigned short* group, bool B);
-void rdsdecoder_decode_type11(unsigned short* group, bool B);
-void rdsdecoder_decode_type12(unsigned short* group, bool B);
-void rdsdecoder_decode_type13(unsigned short* group, bool B);
-void rdsdecoder_decode_type14(unsigned short* group, bool B);
-void rdsdecoder_decode_type15(unsigned short* group, bool B);
+void rdsdecoder_decode_type0(unsigned short *group, bool B);
+void rdsdecoder_decode_type1(unsigned short *group, bool B);
+void rdsdecoder_decode_type2(unsigned short *group, bool B);
+void rdsdecoder_decode_type3(unsigned short *group, bool B);
+void rdsdecoder_decode_type4(unsigned short *group, bool B);
+void rdsdecoder_decode_type5(unsigned short *group, bool B);
+void rdsdecoder_decode_type6(unsigned short *group, bool B);
+void rdsdecoder_decode_type7(unsigned short *group, bool B);
+void rdsdecoder_decode_type8(unsigned short *group, bool B);
+void rdsdecoder_decode_type9(unsigned short *group, bool B);
+void rdsdecoder_decode_type10(unsigned short *group, bool B);
+void rdsdecoder_decode_type11(unsigned short *group, bool B);
+void rdsdecoder_decode_type12(unsigned short *group, bool B);
+void rdsdecoder_decode_type13(unsigned short *group, bool B);
+void rdsdecoder_decode_type14(unsigned short *group, bool B);
+void rdsdecoder_decode_type15(unsigned short *group, bool B);
 
 unsigned int   rdsdecoder_program_identification;
 unsigned char  rdsdecoder_program_type;

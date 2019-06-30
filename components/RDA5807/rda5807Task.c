@@ -94,7 +94,7 @@ void rda5807Task(void *pvParams)
 	};
 
 	RDA5807M_init(&rxSetting);
-	RDA5807M_setFreq(89900);
+	RDA5807M_setFreq(101700);
 	RDA5807M_enableOutput(RDA5807M_TRUE);
 	RDA5807M_setVolume(15);
 	RDA5807M_unmute(RDA5807M_TRUE); 
@@ -146,7 +146,7 @@ void processData(unsigned short* block)
   rdsdecoder_parse(block);
   for (int i=0; i < 6; i++ ){
     if (newmessage[i]){
-	   kprintf(message[i]);
+	   //kprintf(message[i]);
        newmessage[i]=false;
        memset(message[i], ' ', sizeof(message[i]));
     }
