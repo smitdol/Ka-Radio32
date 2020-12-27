@@ -321,7 +321,7 @@ void gpio_get_joysticks(gpio_num_t *enca,gpio_num_t *enca1)
 	}	
 	
 	err = nvs_get_u8(hardware_handle, "P_JOY_0",(uint8_t *) enca);
-	err = nvs_get_u8(hardware_handle, "P_JOY_1",(uint8_t *) enca1);
+	err |= nvs_get_u8(hardware_handle, "P_JOY_1",(uint8_t *) enca1);
 	if (err != ESP_OK) ESP_LOGD(TAG,"g_get_joysticks err 0x%x",err);
 
 	close_partition(hardware_handle,hardware);		
@@ -340,10 +340,11 @@ void gpio_get_active_buttons(bool *abtn0, bool *abtn1)
 		ESP_LOGD(TAG,"in buttons");
 		return;
 	}		 
-	nvs_get_u8(hardware_handle, "O_BTN0",(uint8_t *) abtn0);	 
-	nvs_get_u8(hardware_handle, "O_BTN1",(uint8_t *) abtn0);	
+	err=nvs_get_u8(hardware_handle, "O_BTN0",(uint8_t *) abtn0);
+	err|=nvs_get_u8(hardware_handle, "O_BTN1",(uint8_t *) abtn0);
+	if (err != ESP_OK) ESP_LOGD(TAG,"g_get_active_buttons err 0x%x",err);
 
-	close_partition(hardware_handle,hardware);			
+	close_partition(hardware_handle,hardware);
 }
 
 void gpio_get_buttons(gpio_num_t *enca, gpio_num_t *encb, gpio_num_t *encc,gpio_num_t *enca1, gpio_num_t *encb1, gpio_num_t *encc1)
@@ -375,26 +376,26 @@ void gpio_get_buttons(gpio_num_t *enca, gpio_num_t *encb, gpio_num_t *encc,gpio_
 	close_partition(hardware_handle,hardware);		
 }
 
-void gpio_get_encoders(gpio_num_t *enca, gpio_num_t *encb, gpio_num_t *encbtn, gpio_num_t *enca1, gpio_num_t *encb1, gpio_num_t *encbtn1)
+void gpio_get_encoders(gpio_num_t *enca0, gpio_num_t *encb0, gpio_num_t *encbtn0, gpio_num_t *enca1, gpio_num_t *encb1, gpio_num_t *encbtn1)
 {
 	esp_err_t err;
 	nvs_handle hardware_handle;
 	// init default
 	if (bigSram()) // default is not compatible (gpio 16 & 17)
 	{
-		*enca = GPIO_NONE;
-		*encb= GPIO_NONE;
-		*encbtn= GPIO_NONE;	
-		*enca1 = GPIO_NONE;
-		*encb1 = GPIO_NONE;
+		*enca0  = GPIO_NONE;
+		*encb0  = GPIO_NONE;
+		*encbtn0= GPIO_NONE;
+		*enca1  = GPIO_NONE;
+		*encb1  = GPIO_NONE;
 		*encbtn1= GPIO_NONE;	
 	} else
 	{
-		*enca = PIN_ENC0_A;
-		*encb= PIN_ENC0_B;
-		*encbtn= PIN_ENC0_BTN;
-		*enca1 = PIN_ENC1_A;
-		*encb1= PIN_ENC1_B;
+		*enca0  = PIN_ENC0_A;
+		*encb0  = PIN_ENC0_B;
+		*encbtn0= PIN_ENC0_BTN;
+		*enca1  = PIN_ENC1_A;
+		*encb1  = PIN_ENC1_B;
 		*encbtn1= PIN_ENC1_BTN;	}
 	
 	if (open_partition(hardware, gpio_space,NVS_READONLY,&hardware_handle)!= ESP_OK)
@@ -403,11 +404,11 @@ void gpio_get_encoders(gpio_num_t *enca, gpio_num_t *encb, gpio_num_t *encbtn, g
 		return;
 	}	
 	
-	err = nvs_get_u8(hardware_handle, "P_ENC0_A",(uint8_t *) enca);
-	err |=nvs_get_u8(hardware_handle, "P_ENC0_B",(uint8_t *) encb);
-	err |=nvs_get_u8(hardware_handle, "P_ENC0_BTN", (uint8_t *)encbtn);
-	err |= nvs_get_u8(hardware_handle, "P_ENC1_A",(uint8_t *) enca1);
-	err |=nvs_get_u8(hardware_handle, "P_ENC1_B",(uint8_t *) encb1);
+	err = nvs_get_u8(hardware_handle, "P_ENC0_A",   (uint8_t *)  enca0);
+	err |=nvs_get_u8(hardware_handle, "P_ENC0_B",   (uint8_t *)  encb0);
+	err |=nvs_get_u8(hardware_handle, "P_ENC0_BTN", (uint8_t *)encbtn0);
+	err |=nvs_get_u8(hardware_handle, "P_ENC1_A",   (uint8_t *)  enca1);
+	err |=nvs_get_u8(hardware_handle, "P_ENC1_B",   (uint8_t *)  encb1);
 	err |=nvs_get_u8(hardware_handle, "P_ENC1_BTN", (uint8_t *)encbtn1);
 	if (err != ESP_OK) ESP_LOGD(TAG,"g_get_encoder0 err 0x%x",err);
 
