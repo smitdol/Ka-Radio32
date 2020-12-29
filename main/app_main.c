@@ -221,7 +221,7 @@ void stopWake(){
 
 void initTimers()
 {
-timer_config_t config;
+	timer_config_t config;
 	config.alarm_en = 1;
     config.auto_reload = TIMER_AUTORELOAD_DIS;
     config.counter_dir = TIMER_COUNT_UP;
@@ -883,28 +883,28 @@ void app_main()
 	uint8_t rt;
 	option_get_lcd_info(&g_device->lcd_type,&rt);
 	ESP_LOGI(TAG,"LCD Type %d",g_device->lcd_type);
-	//lcd rotation
-	setRotat(rt) ;	
-	lcd_init(g_device->lcd_type);
-	
+	if (g_device->lcd_type != LCD_NONE) {
+		//lcd rotation
+		setRotat(rt) ;	
+		lcd_init(g_device->lcd_type);
+	}
 
 	// Init i2c if lcd doesn't not (spi) for rde5807=
 	if (g_device->lcd_type >= LCD_SPI)
 	{
 		i2c_config_t conf;
-	    conf.mode = I2C_MODE_MASTER;
-	    conf.sda_io_num = (g_device->lcd_type == LCD_NONE)?PIN_I2C_SDA:PIN_SI2C_SDA;
+		conf.mode = I2C_MODE_MASTER;
+		conf.sda_io_num = (g_device->lcd_type == LCD_NONE)?PIN_I2C_SDA:PIN_SI2C_SDA;
 		conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-	    conf.scl_io_num = (g_device->lcd_type == LCD_NONE)?PIN_I2C_SCL:PIN_SI2C_SCL;
-	    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-	    conf.master.clk_speed = I2C_MASTER_RFREQ_HZ;
+		conf.scl_io_num = (g_device->lcd_type == LCD_NONE)?PIN_I2C_SCL:PIN_SI2C_SCL;
+		conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+		conf.master.clk_speed = I2C_MASTER_RFREQ_HZ;
 		//ESP_ERROR_CHECK
 		(i2c_param_config(I2C_MASTER_NUM, &conf));
 		ESP_LOGD(TAG, "i2c_driver_install %d", I2C_MASTER_NUM);
 		//ESP_ERROR_CHECK
 		(i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0));			
 	}
-
 
 	
 	// output mode
@@ -948,8 +948,8 @@ void app_main()
 	ESP_LOGI(TAG, "SDK %s",esp_get_idf_version());
 	ESP_LOGI(TAG, "Heap size: %d",xPortGetFreeHeapSize());
 
-	lcd_welcome("","");
-	lcd_welcome("","STARTING");
+	if (g_device->lcd_type != LCD_NONE) lcd_welcome("","");
+	if (g_device->lcd_type != LCD_NONE) lcd_welcome("","STARTING");
 	
 	// volume
 	setIvol( g_device->vol);
@@ -1008,7 +1008,7 @@ void app_main()
 	renderer_init(create_renderer_config());
 	
 	// LCD Display infos
-    lcd_welcome(localIp,"STARTED");
+    if (g_device->lcd_type != LCD_NONE) lcd_welcome(localIp,"STARTED");
 	vTaskDelay(10);
     ESP_LOGI(TAG, "RAM left %d", esp_get_free_heap_size());
 

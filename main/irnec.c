@@ -248,7 +248,7 @@ void rmt_nec_rx_task()
 					if (res == RTN_REPEAT)
 					{
 						if (flagFirstRepeat ==  true)
-							xQueueSend(event_ir,&last_evt, 0);
+							xQueueSend(irQueue,&last_evt, 0);
 						flagFirstRepeat = true;	// not the first one
 						offset += 3;		
 					}
@@ -263,7 +263,7 @@ void rmt_nec_rx_task()
 						last_evt.cmd = evt.cmd;
 						last_evt.repeat_flag = true;
 						flagFirstRepeat = false;
-						xQueueSend(event_ir,&evt, 0);
+						xQueueSend(irQueue,&evt, 0);
 					} else {
 						ESP_LOGD(NEC_TAG, "RMT Res: %d",res);
 						break;

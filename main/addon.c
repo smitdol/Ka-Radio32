@@ -1,15 +1,13 @@
 /******************************************************************************
- * 
+ *
  * Copyright 2017 karawin (http://www.karawin.fr)
  *
 *******************************************************************************/
-
 #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/time.h>
-
 #include "ClickEncoder.h"
 #include "ClickButtons.h"
 #include "ClickJoystick.h"
@@ -18,35 +16,26 @@
 #include "webclient.h"
 #include "webserver.h"
 #include "interface.h"
-
 #include "addon.h"
 #include "custom.h"
 #include "u8g2_esp32_hal.h"
 #include "ucg_esp32_hal.h"
 #include <time.h>
 #include "ntp.h"
-
 #include "eeprom.h"
 #include "addonu8g2.h"
 #include "addonucg.h"
 #include "xpt2046.h"
-
 #include "esp_adc_cal.h"
-
 #define TAG  "addon"
-
 static void evtClearScreen();
 // second before time display in stop state
 #define DTIDLE  60
-
-
-
 #define isColor (lcd_type&LCD_COLOR)
-const char *stopped = "STOPPED";	
-
+const char *stopped = "STOPPED";
 char irStr[4];
-xQueueHandle event_ir = NULL;
-xQueueHandle event_lcd = NULL;
+xQueueHandle irQueue = NULL;
+xQueueHandle lcdQueue = NULL;
 u8g2_t u8g2; // a structure which will contain all the data for one display
 ucg_t  ucg;
 static uint8_t lcd_type;
@@ -57,16 +46,13 @@ static typeScreen stateScreen = snull;
 static typeScreen defaultStateScreen = smain;
 // state of the transient screen
 static uint8_t mTscreen = MTNEW; // 0 dont display, 1 display full, 2 display variable part
-
 static bool playable = true;
 static uint16_t volume;
 static int16_t futurNum = 0; // the number of the wanted station
-
 static unsigned timerScreen = 0;
 static unsigned timerScroll = 0;
 static unsigned timerLcdOut = 0;
 static unsigned timer1s = 0;
-
 static unsigned timein = 0;
 static struct tm *dt;
 time_t timestamp = 0;
@@ -76,38 +62,30 @@ static bool itAskStime = false; // start the time display
 static uint8_t itLcdOut = 0;
 //static bool itAskSsecond = false; // start the time display
 static bool state = false; // start stop on Ok key
-
 static int16_t currentValue = 0;
 static bool dvolume = true; // display volume screen
- 
 // custom ir code init from hardware nvs
 typedef enum {KEY_UP,KEY_LEFT,KEY_OK,KEY_RIGHT,KEY_DOWN,
 		KEY_0,KEY_1,KEY_2,KEY_3,KEY_4,KEY_5,KEY_6,KEY_7,KEY_8,KEY_9,
 		KEY_STAR,KEY_DIESE,KEY_INFO, KEY_MAX} customKey_t;
-		
-static uint32_t customKey[KEY_MAX][2]; 
+static uint32_t customKey[KEY_MAX][2];
 static bool isCustomKey = false;
-
 static bool isEncoder0 = true;
 static bool isEncoder1 = true;
 static bool isButton0 = true;
 static bool isButton1 = true;
 static bool isJoystick0 = true;
 static bool isJoystick1 = true;
-
-void Screen(typeScreen st); 
+void Screen(typeScreen st);
 void drawScreen();
 static void evtScreen(typelcmd value);
-
 Encoder_t* encoder0 = NULL;
 Encoder_t* encoder1 = NULL;
 Button_t* button0 = NULL;
 Button_t* button1 = NULL;
 Joystick_t* joystick1 = NULL;
 Joystick_t* joystick0 = NULL;
-
 struct tm* getDt() { return dt;}
-
 void* getEncoder(int num)
 {
 	if (num == 0) return (void*)encoder0;
@@ -117,7 +95,6 @@ void* getEncoder(int num)
 
 static void ClearBuffer()
 {
-  if (lcd_type == LCD_NONE) return;
   if (isColor)
 	ucg_ClearScreen(&ucg);
   else
@@ -126,16 +103,14 @@ static void ClearBuffer()
 
 static int16_t DrawString(int16_t x, int16_t y,  const char *str)
 {
-// if (lcd_type == LCD_NONE) return -1;
   if (isColor)
 	return ucg_DrawString(&ucg,x,y,0,str);
   else
-	return u8g2_DrawUTF8(&u8g2,x,y,str);  
+	return u8g2_DrawUTF8(&u8g2,x,y,str);
 }
 
 static void DrawColor(uint8_t color, uint8_t r, uint8_t g, uint8_t b)
 {
-//  if (lcd_type == LCD_NONE) return;
   if (isColor)
 	ucg_SetColor(&ucg, 0,r,g,b);
   else
@@ -144,7 +119,6 @@ static void DrawColor(uint8_t color, uint8_t r, uint8_t g, uint8_t b)
 
 static void DrawBox(ucg_int_t x, ucg_int_t y, ucg_int_t w, ucg_int_t h)
 {
-//  if (lcd_type == LCD_NONE) return;
   if (isColor)
 	ucg_DrawBox(&ucg, x,y,w,h);
   else
@@ -153,49 +127,37 @@ static void DrawBox(ucg_int_t x, ucg_int_t y, ucg_int_t w, ucg_int_t h)
 
 uint16_t GetWidth()
 {
-//  if (lcd_type == LCD_NONE) return 0;
   if (isColor)
 	  return ucg_GetWidth(&ucg);
-
   return u8g2.width;
 }
+
 uint16_t GetHeight()
 {
-//  if (lcd_type == LCD_NONE) return 0;
   if (isColor)
 	  return ucg_GetHeight(&ucg);
-
   return u8g2.height;
 }
 
 void wakeLcd()
 {
-//	if (lcd_type == LCD_NONE) return;
-	// add the gpio switch on here gpioLedBacklight can be directly a GPIO_NUM_xx or declared in gpio.h
-	LedBacklightOn();	
+	LedBacklightOn();
 	timerLcdOut = getLcdOut(); // rearm the tempo
 	if (itLcdOut) {mTscreen= MTNEW; evtScreen(defaultStateScreen);}
-	itLcdOut = 0;  //0 not activated, 1 sleep requested, 2 in sleep 
+	itLcdOut = 0;  //0 not activated, 1 sleep requested, 2 in sleep
 }
 
 void sleepLcd()
 {
-//    if (lcd_type == LCD_NONE) return;
 	itLcdOut = 2;  // in sleep
-	// add the gpio switch off here
 	LedBacklightOff();
 	evtClearScreen();
-
 }
 
 void lcd_init(uint8_t Type)
-{	
+{
 	lcd_type = Type;
-
-	// init the gpio for backlight
 	LedBacklightInit();
-	if (lcd_type == LCD_NONE) return;
-	
 	if (lcd_type & LCD_COLOR) // Color one
 	{
 		lcd_initUcg(&lcd_type);
@@ -204,43 +166,38 @@ void lcd_init(uint8_t Type)
 		lcd_initU8g2(&lcd_type);
 	}
 	vTaskDelay(1);
-//	dt=localtime(&timestamp);
 }
 
 void in_welcome(const char* ip,const char*state,int y,char* Version)
 {
-	if (lcd_type == LCD_NONE) return;
 	DrawString(2,2*y,Version);
 	DrawColor(0,0,0,0);
 	DrawBox(2, 4*y, GetWidth()-2, y);
 	DrawColor(1,255,255,255);
 	DrawString(2,4*y,state);
-	DrawString( DrawString(2,5*y,"IP:")+18,5*y,ip);	
-}		
+	DrawString( DrawString(2,5*y,"IP:")+18,5*y,ip);
+}
 
 void lcd_welcome(const char* ip,const char*state)
 {
-char Version[20];
+	char Version[20];
 	sprintf(Version,"Version %s R%s\n",RELEASE,REVISION);
-	if (lcd_type == LCD_NONE) return;
 	if ((strlen(ip)==0)&&(strlen(state)==0)) ClearBuffer();
-	if (isColor) 
-	{
+	if (isColor) {
 		setfont(2);
 		int y = - ucg_GetFontDescent(&ucg)+ ucg_GetFontAscent(&ucg) +3; //interline
-		DrawString(GetWidth()/4,2,"KaRadio32");	
+		DrawString(GetWidth()/4,2,"KaRadio32");
 		setfont(1);
 		in_welcome(ip,state,y,Version);
-	} else
-	{
+	} else {
 		u8g2_FirstPage(&u8g2);
-		do {	
+		do {
 			setfont8(2);
 			int y = (u8g2_GetAscent(&u8g2) - u8g2_GetDescent(&u8g2));
 			DrawString(GetWidth()/4,2,"KaRadio32");
 			setfont8(1);
 			in_welcome(ip,state,y,Version);
-		} while ( u8g2_NextPage(&u8g2) );	    	
+		} while ( u8g2_NextPage(&u8g2) );
 	}
 }
 
@@ -255,21 +212,19 @@ IRAM_ATTR  void ServiceAddon(void)
 	if (timer1s >=1000)
 	{
 		// Time compute
-        timestamp++;  // time update  
-		if (timerLcdOut >0) timerLcdOut--; // 
+		timestamp++;  // time update
+		if (timerLcdOut >0) timerLcdOut--; //
 		timein++;
 		if ((timestamp % (10*DTIDLE))==0){ itAskTime=true;} // synchronise with ntp every x*DTIDLE
-		 
-		if (((timein % DTIDLE)==0)&&(!state)  ) {           
-			{itAskStime=true;timein = 0;} // start the time display when paused
-        } 
+		if (((timein % DTIDLE)==0)&&(!state)  ) {
+			itAskStime=true;
+			timein = 0; // start the time display when paused
+	        }
 		if (timerLcdOut == 1) itLcdOut = 1; // ask to go to sleep
 		if (!syncTime) itAskTime=true; // first synchro if not done
-		
 		timer1s = 0;
-		// Other slow timers        
-         timerScreen++;
-         
+		// Other slow timers
+	         timerScreen++;
 	}
 }
 
@@ -279,6 +234,7 @@ void setFuturNum(int16_t new)
 {
 	futurNum = new;
 }
+
 int16_t getFuturNum()
 {
 	return futurNum;
@@ -287,16 +243,14 @@ int16_t getFuturNum()
 ////////////////////////////////////////
 // scroll each line
 void scroll()
-{	
+{
 	isColor?scrollUcg():scrollU8g2();
 }
-
 
 ////////////////////////////
 // Change the current screen
 ////////////////////////////
 void Screen(typeScreen st){
-//printf("Screen: st: %d, stateScreen: %d, mTscreen: %d, default: %d\n",st,stateScreen,mTscreen,defaultStateScreen);
   if (stateScreen != st)
   {
 	mTscreen = MTNEW;
@@ -306,31 +260,23 @@ void Screen(typeScreen st){
   {
     if (mTscreen == MTNODISPLAY) mTscreen = MTREFRESH;
   }
-
-//  printf("Screenout: st: %d, stateScreen: %d, mTscreen: %d, default: %d, timerScreen: %d \n",st,stateScreen,mTscreen,defaultStateScreen,timerScreen);
-
-  stateScreen = st;  
+  stateScreen = st;
   timein = 0;
-  timerScreen = 0;  
+  timerScreen = 0;
   drawScreen();
-//printf("Screendis: st: %d, stateScreen: %d, mTscreen: %d, default: %d\n",st,stateScreen,mTscreen,defaultStateScreen);  
-//  vTaskDelay(1);
 }
-
 
 ////////////////////////////////////////
 // draw all lines
 void drawFrame()
-{	
+{
 	dt=localtime(&timestamp);
-	if (lcd_type == LCD_NONE) return;
 	isColor?drawFrameUcg(mTscreen):drawFrameU8g2(mTscreen);
 }
 
-
 //////////////////////////
 void drawTTitle(char* ttitle)
-{ 
+{
 	isColor?drawTTitleUcg(ttitle):drawTTitleU8g2(ttitle);
 }
 
@@ -339,144 +285,121 @@ void drawTTitle(char* ttitle)
 void drawNumber()
 {
 	if (strlen(irStr) >0)
-		isColor?drawNumberUcg(mTscreen,irStr):drawNumberU8g2(mTscreen,irStr);  
+		isColor?drawNumberUcg(mTscreen,irStr):drawNumberU8g2(mTscreen,irStr);
 }
 
+void changeStation(int16_t value)
+{
+// increment or decrement futureNum (aka next station) depending on sign of value (up/down)
+	currentValue = value; // save sign (up/down)
+	ESP_LOGD(TAG,"changeStation val: %d, futurnum: %d",value,futurNum);
+	if (value < 0) futurNum--; else futurNum++;
+	// check rollover
+	if (futurNum > 254) futurNum = 0;
+	if (futurNum <0) futurNum = 254;
+	ESP_LOGD(TAG,"futurnum: %d",futurNum);
+}
 
 ////////////////////
 // draw the station screen
 void drawStation()
 {
-  char sNum[4] ; 
-  char* ddot;
-  char* ptl ;
-  struct shoutcast_info* si;
-
- //ClearBuffer();
-	
-  do {
-	si = getStation(futurNum);
-	sprintf(sNum,"%d",futurNum);
-	ddot = si->name;    
-	ptl = ddot;
-	while ( *ptl == 0x20){ddot++;ptl++;}
-	if (strlen(ddot)==0) // don't start an undefined station
-	{
-		playable = false; 
+	char sNum[4];
+	char* ddot;
+	char* ptl;
+	struct shoutcast_info* si;
+	do {
+		si = getStation(futurNum);
+		ddot = si->name;
+		ptl = ddot;
+		while ( *ptl == 0x20){ddot++;ptl++;} // skip blanks
+		if (strlen(ddot)==0) {
+			playable = false; // don't start an undefined station
+			changeStation(currentValue);
+		} else {
+			playable = true;
+		}
 		free(si);
-		if (currentValue < 0) {
-			futurNum--; 
-			if (futurNum <0) futurNum = 254;
-		}
-		else {
-			futurNum++;
-			if (futurNum > 254) futurNum = 0;
-		}
-	}	
-	else 
-		playable = true;                      
-  } while (playable == false); 
-	
-  //drawTTitle(ststr); 
-//printf ("drawStation: %s\n",sNum  );
-  free (si);
-  if (lcd_type == LCD_NONE) return;
-  isColor?drawStationUcg(mTscreen,sNum,ddot):drawStationU8g2(mTscreen,sNum,ddot);
+	} while (playable == false);
+	sprintf(sNum,"%d",futurNum);
+	isColor?drawStationUcg(mTscreen,sNum,ddot):drawStationU8g2(mTscreen,sNum,ddot);
 }
 
 ////////////////////
 // draw the volume screen
 void drawVolume()
 {
-//  printf("drawVolume. mTscreen: %d, Volume: %d\n",mTscreen,volume);
-  if (lcd_type == LCD_NONE) return;
-  isColor?drawVolumeUcg(mTscreen):drawVolumeU8g2(mTscreen);	
+	isColor?drawVolumeUcg(mTscreen):drawVolumeU8g2(mTscreen);
 }
 
 void drawTime()
 {
 	dt=localtime(&timestamp);
-	if (lcd_type == LCD_NONE) return;
-	isColor?drawTimeUcg(mTscreen,timein):drawTimeU8g2(mTscreen,timein);	
+	isColor?drawTimeUcg(mTscreen,timein):drawTimeU8g2(mTscreen,timein);
 }
-
 
 ////////////////////
 // Display a screen on the lcd
 void drawScreen()
 {
-//  if (lcd_type == LCD_NONE) return;
-//  ESP_LOGW(TAG,"stateScreen: %d, mTscreen: %d",stateScreen,mTscreen);
-  if ((mTscreen != MTNODISPLAY)&&(!itLcdOut))
-  {
-	switch (stateScreen)
+//	ESP_LOGW(TAG,"stateScreen: %d, mTscreen: %d",stateScreen,mTscreen);
+	if ((mTscreen != MTNODISPLAY)&&(!itLcdOut))
 	{
-    case smain:  // 
-     drawFrame();
-      break;
-    case svolume:
-      drawVolume();
-      break;
-    case sstation:
-      drawStation(); 
-      break; 
-    case stime:
-      drawTime(); 
-      break;     
-    case snumber:   
-      drawNumber();     
-      break;
-    default: 
-	  Screen(defaultStateScreen); 
-//	  drawFrame();	  
-	} 
-//	if (mTscreen == MTREFRESH)
-		mTscreen = MTNODISPLAY;
-  }   
+		switch (stateScreen)
+		{
+		case smain:  //
+			drawFrame();
+			break;
+		case svolume:
+			drawVolume();
+			break;
+		case sstation:
+			drawStation();
+			break;
+		case stime:
+			drawTime();
+			break;
+		case snumber:
+			drawNumber();
+			break;
+		default:
+			Screen(defaultStateScreen);
+//			drawFrame();
+		}
+//		if (mTscreen == MTREFRESH)
+			mTscreen = MTNODISPLAY;
+	}
 }
-
 
 void stopStation()
 {
-//    irStr[0] = 0;
 	clientDisconnect("addon stop");
 }
+
 void startStation()
 {
- //   irStr[0] = 0;
-    playStationInt(futurNum); ; 
+	playStationInt(futurNum); ;
 }
+
 void startStop()
-{   
+{
 	ESP_LOGD(TAG,"START/STOP State: %d",state);
-    state?stopStation():startStation();
-}  
+	state?stopStation():startStation();
+}
+
 void stationOk()
 {
 	ESP_LOGD(TAG,"STATION OK");
-       if (strlen(irStr) >0)
-	   {	   
-		  futurNum = atoi(irStr);
-          playStationInt(futurNum);
-	   }  
-        else
-        {
-            startStop();
-        }  
-        irStr[0] = 0;  
+	if (strlen(irStr) >0){
+		futurNum = atoi(irStr);
+		playStationInt(futurNum);
+	} else {
+		startStop();
+        }
+        irStr[0] = 0;
 }
-void changeStation(int16_t value)
-{
-	currentValue = value;
-	ESP_LOGD(TAG,"changeStation val: %d, futurnum: %d",value,futurNum);
-	if (value > 0) futurNum++;
-	if (futurNum > 254) futurNum = 0;
-	else if (value < 0) futurNum--;
-	if (futurNum <0) futurNum = 254;
-	ESP_LOGD(TAG,"futurnum: %d",futurNum);
-	//else if (value != 0) mTscreen = MTREFRESH;
-}				
-// IR 
+
+// IR
 // a number of station in progress...
 void nbStation(char nb)
 {
@@ -486,54 +409,49 @@ void nbStation(char nb)
   irStr[id+1] = 0;
   evtScreen(snumber);
 }
- 
-// 
+
+//
 static void evtClearScreen()
 {
-//	isColor?ucg_ClearScreen(&ucg):u8g2_ClearDisplay(&u8g2);
 	event_lcd_t evt;
-	evt.lcmd = eclrs;	
+	evt.lcmd = eclrs;
 	evt.lline = NULL;
-//	xQueueSendToFront(event_lcd,&evt, 0);	
-	xQueueSend(event_lcd,&evt, 0);	
+	xQueueSend(lcdQueue,&evt, 0);
 }
 
 static void evtScreen(typelcmd value)
 {
 	event_lcd_t evt;
-	evt.lcmd = escreen;	
+	evt.lcmd = escreen;
 	evt.lline = (char*)((uint32_t)value);
-	xQueueSend(event_lcd,&evt, 0);
-	
+	xQueueSend(lcdQueue,&evt, 0);
 }
 
 static void evtStation(int16_t value)
 { // value +1 or -1
-	event_lcd_t evt; 
+	event_lcd_t evt;
 	evt.lcmd = estation;
 	evt.lline = (char*)((uint32_t)value);
-	xQueueSend(event_lcd,&evt, 0);			
+	xQueueSend(lcdQueue,&evt, 0);
 }
 
 // toggle main / time
 static void toggletime()
 {
 	event_lcd_t evt;
-	evt.lcmd = etoggle;	
+	evt.lcmd = etoggle;
 	evt.lline = NULL;
-	xQueueSend(event_lcd,&evt, 0);	
+	xQueueSend(lcdQueue,&evt, 0);
 }
 
 //----------------------------
 // Adc read: keyboard buttons
 //----------------------------
-
 static adc1_channel_t  channel = GPIO_NONE;
 static bool inside = false;
-
 void adcInit()
 {
-	gpio_get_adc(&channel);	
+	gpio_get_adc(&channel);
 	ESP_LOGD(TAG,"ADC Channel: %i",channel);
 	if (channel != GPIO_NONE)
 	{
@@ -546,7 +464,6 @@ void adcLoop() {
 	uint32_t voltage,voltage0,voltage1;
 	bool wasVol = false;
 	if (channel == GPIO_NONE) return;  // no gpio specified
-	
 	voltage0 = (adc1_get_raw(channel)+adc1_get_raw(channel)+adc1_get_raw(channel)+adc1_get_raw(channel))/4;
 	vTaskDelay(1);
 	voltage1 = (adc1_get_raw(channel)+adc1_get_raw(channel)+adc1_get_raw(channel)+adc1_get_raw(channel))/4;
@@ -554,20 +471,18 @@ void adcLoop() {
 	voltage = (voltage0+voltage1)*105/(819);
 	if (voltage <  40) return; // no panel
 //	printf("Voltage: %d\n",voltage);
-
-	if (inside&&(voltage0 > 3700)) 
+	if (inside&&(voltage0 > 3700))
 	{
 		inside = false;
 		wasVol = false;
 		return;
 	}
-	if (voltage0 > 3700) 
+	if (voltage0 > 3700)
 	{
 		wasVol = false;
 	}
-	if ((voltage0 >3700) || (voltage1 >3700)) return; // must be two valid voltage	
-	
-	if (voltage < 985) ESP_LOGD(TAG,"Voltage: %i",voltage);	
+	if ((voltage0 >3700) || (voltage1 >3700)) return; // must be two valid voltage
+	if (voltage < 985) ESP_LOGD(TAG,"Voltage: %i",voltage);
 //		printf("VOLTAGE: %d\n",voltage);
 	if ((voltage >400) && (voltage < 590)) // volume +
 	{
@@ -580,30 +495,30 @@ void adcLoop() {
 		setRelVolume(-5);
 		wasVol = true;
 		ESP_LOGD(TAG,"Volume- : %i",voltage);
-	}	
-		else if ((voltage >900) && (voltage < 985)) // station+
+	}
+	else if ((voltage >900) && (voltage < 985)) // station+
+	{
+		if (!wasVol)
 		{
-			if (!wasVol)
-			{
-				evtStation(1);
-				ESP_LOGD(TAG,"station+: %i",voltage);
-			}
-		}	
-		else if ((voltage >620) && (voltage < 710)) // station-
+			evtStation(1);
+			ESP_LOGD(TAG,"station+: %i",voltage);
+		}
+	}
+	else if ((voltage >620) && (voltage < 710)) // station-
+	{
+		if (!wasVol)
 		{
-			if (!wasVol)
-			{
-				evtStation(-1);
-				ESP_LOGD(TAG,"station-: %i",voltage);
-			}
-		}	
+			evtStation(-1);
+			ESP_LOGD(TAG,"station-: %i",voltage);
+		}
+	}
 	if (!inside)
-	{	
+	{
 		if  ((voltage >100) && (voltage < 220)) // toggle time/info  old stop
 		{
 			inside = true;
 			toggletime();
-			ESP_LOGD(TAG,"toggle time: %i",voltage);	
+			ESP_LOGD(TAG,"toggle time: %i",voltage);
 		}
 		else if ((voltage >278) && (voltage < 380)) //start stop toggle   old start
 		{
@@ -611,79 +526,77 @@ void adcLoop() {
 			startStop();
 			ESP_LOGD(TAG,"start stop: %i",voltage);
 		}
-
 	}
+}
+
+void updateStationOrVolume(bool role, int16_t newValue)
+{
+	if (newValue!=0)
+	{
+		typeScreen estate;
+		if (role) estate = sstation; else estate = svolume;
+		if (stateScreen != estate)
+		{
+		        if(role) setRelVolume(newValue);else evtStation(-newValue);
+		}
+		if (stateScreen == estate)
+		{
+		        if(role) evtStation(-newValue); else setRelVolume(newValue);
+		}
+	}
+}
+
+void buttonUpdate(bool role, Button state1, Button state2)
+{
+	int16_t newValue = ((state1!=Open)?5:0)+((state2!=Open)?-5:0); // sstation take + or - in any value
+	updateStationOrVolume(role, newValue);
+	ESP_LOGD(TAG,"Button1: %i, Button2: %i, value: %i",state1,state2,newValue);
 }
 
 //-----------------------
  // Compute the Buttons
  //----------------------
- void joystickCompute(Joystick_t *enc,bool role)
- {
-	int16_t newValue = 0;
-	{
-		Button state1 = getJoystick(enc,0);
-		Button state2 = getJoystick(enc,1);
-//		ESP_LOGD(TAG,"Button1: %i, Button2: %i",state1,state2);	
-		newValue=((state1!=Open)?5:0)+((state2!=Open)?-5:0); // sstation take + or - in any value
-		typeScreen estate;
-		if (role) estate = sstation; else estate = svolume;
-		if ((stateScreen  != estate)&&(newValue != 0))
-		{    
-			if(role) setRelVolume(newValue);else evtStation(-newValue);
-			ESP_LOGD(TAG,"Button1: %i, Button2: %i, value: %i",state1,state2,newValue);	
-		} 
-		if ((stateScreen  == estate)&&(newValue != 0))
-		{    
-			if(role) evtStation(-newValue); else setRelVolume(newValue);
-			ESP_LOGD(TAG,"Button1: %i, Button2: %i, value: %i",state1,state2,newValue);		
-		} 			
-	}	 
- }
+void joystickCompute(Joystick_t *enc,bool role)
+{
+	Button state1 = getJoystick(enc,0);
+	Button state2 = getJoystick(enc,1);
+	buttonUpdate(role, state1, state2);
+}
 
 //-----------------------
  // Compute the Buttons
  //----------------------
  void buttonCompute(Button_t *enc,bool role)
-{	
+{
 	int16_t newValue = 0;
-	Button state0 = getButtons(enc,0);	
+	Button state0 = getButtons(enc,0);
+	typeScreen estate;
+	if (role) estate = sstation; else estate = svolume;
 	if (state0 != Open)
 	{
-		ESP_LOGD(TAG,"Button0: %i",state0);	
+		ESP_LOGD(TAG,"Button0: %i",state0);
 		if (state0 == Clicked) startStop();
 		// double click = toggle time
-		if (state0 == DoubleClicked) toggletime();	
+		if (state0 == DoubleClicked) toggletime();
 		if (state0 == Held)
-		{   
-			if (stateScreen!= (role?sstation:svolume))
-			{	
-				role?evtStation(newValue):setRelVolume(newValue);
+		{
+			if (stateScreen!= estate)
+			{
+				updateStationOrVolume(role, newValue);
 			}
-		} 			
+		}
 	} else
 	{
 		Button state1 = getButtons(enc,1);
 		Button state2 = getButtons(enc,2);
-//		ESP_LOGD(TAG,"Button1: %i, Button2: %i",state1,state2);	
-		newValue=((state1!=Open)?5:0)+((state2!=Open)?-5:0); // sstation take + or - in any value
-		typeScreen estate;
-		if (role) estate = sstation; else estate = svolume;
-		if ((stateScreen  != estate)&&(newValue != 0))
-		{    
-			if(role) setRelVolume(newValue);else evtStation(newValue);
-		} 
-		if ((stateScreen  == estate)&&(newValue != 0))
-		{    
-			if(role) evtStation(newValue); else setRelVolume(newValue);		
-		} 			
+		buttonUpdate(role, state1, state2);
 	}
 }
- 
+
 void buttonsLoop()
-{	
-// button0 = volume control or station when pushed
-// button1 = station control or volume when pushed
+{
+	// button0 = volume control or station when pushed
+	// button1 = station control or volume when pushed
 	if (isButton0) buttonCompute(button0,VCTRL);
 	if (isButton1) buttonCompute(button1,SCTRL);
 	if (isJoystick0) joystickCompute(joystick0,VCTRL);
@@ -691,51 +604,39 @@ void buttonsLoop()
 }
 
 //-----------------------
- // Compute the encoder
- //----------------------
-
+// Compute the encoder
+//----------------------
 void encoderCompute(Encoder_t *enc,bool role)
-{	
+{
 	int16_t newValue = - getValue(enc);
 	if (newValue != 0) ESP_LOGD(TAG,"encoder value: %d, stateScreen: %d",newValue,stateScreen);
 	Button newButton = getButton(enc);
 	typeScreen estate;
 	if (role) estate = sstation; else estate = svolume;
-   	// if an event on encoder switch	
+	// if an event on encoder switch
 	if (newButton != Open)
-	{ 
+	{
 		if (newButton == Clicked) {startStop();}
 		// double click = toggle time
 		if (newButton == DoubleClicked) { toggletime();}
 		// switch held and rotated then change station
 		if ((newButton == Held)&&(getPinState(enc) == getpinsActive(enc)))
-		{    
-			if (stateScreen!= (role?sstation:svolume))
-				role?evtStation(newValue):setRelVolume(newValue);
-		} 			
-	}	//else
+		{
+			if (stateScreen!= estate)
+				updateStationOrVolume(role, newValue);
+		}
+	} else
 		// no event on button switch
-	{
-		if ((stateScreen  != estate)&&(newValue != 0))
-		{    
-			if(role) setRelVolume(newValue);else evtStation(newValue);
-		} 
-		if ((stateScreen  == estate)&&(newValue != 0))
-		{    
-			if(role) evtStation(newValue); else setRelVolume(newValue);			
-		} 	
-	}		
+	updateStationOrVolume(role, newValue);
 }
 
 void encoderLoop()
 {
-// encoder0 = volume control or station when pushed
-// encoder1 = station control or volume when pushed
-	if (isEncoder0) encoderCompute(encoder0,VCTRL);
-	if (isEncoder1) encoderCompute(encoder1,SCTRL);
+	// encoder0 = volume control or station when pushed
+	// encoder1 = station control or volume when pushed
+	if (isEncoder0) encoderCompute(encoder0,SCTRL);
+	if (isEncoder1) encoderCompute(encoder1,VCTRL);
 }
-
-
 
 // compute custom IR
 bool irCustom(uint32_t evtir, bool repeat)
@@ -749,25 +650,25 @@ bool irCustom(uint32_t evtir, bool repeat)
 	{
 		switch (i)
 		{
-			case KEY_UP: evtStation(+1);  break;
-			case KEY_LEFT: setRelVolume(-5);  break;
-			case KEY_OK: if (!repeat ) stationOk();   break;
-			case KEY_RIGHT: setRelVolume(+5);   break;
-			case KEY_DOWN: evtStation(-1);  break;
-			case KEY_0: if (!repeat ) nbStation('0');   break;  
-			case KEY_1: if (!repeat ) nbStation('1');  break;   
-			case KEY_2: if (!repeat ) nbStation('2');  break;   
-			case KEY_3: if (!repeat ) nbStation('3');  break;   
-			case KEY_4: if (!repeat ) nbStation('4');  break;   
-			case KEY_5: if (!repeat ) nbStation('5');  break;   
-			case KEY_6: if (!repeat ) nbStation('6');  break;   
-			case KEY_7: if (!repeat ) nbStation('7');  break;   
-			case KEY_8: if (!repeat ) nbStation('8');  break;   
-			case KEY_9: if (!repeat ) nbStation('9');  break;
-			case KEY_STAR: if (!repeat ) playStationInt(futurNum);  break;
-			case KEY_DIESE: if (!repeat )  stopStation();  break;
-			case KEY_INFO: if (!repeat ) toggletime();  break;
-			default: ;			
+			case KEY_UP: evtStation(+1); break;
+			case KEY_LEFT: setRelVolume(-5); break;
+			case KEY_OK: if (!repeat ) stationOk(); break;
+			case KEY_RIGHT: setRelVolume(+5); break;
+			case KEY_DOWN: evtStation(-1); break;
+			case KEY_0: if (!repeat ) nbStation('0'); break;
+			case KEY_1: if (!repeat ) nbStation('1'); break;
+			case KEY_2: if (!repeat ) nbStation('2'); break;
+			case KEY_3: if (!repeat ) nbStation('3'); break;
+			case KEY_4: if (!repeat ) nbStation('4'); break;
+			case KEY_5: if (!repeat ) nbStation('5'); break;
+			case KEY_6: if (!repeat ) nbStation('6'); break;
+			case KEY_7: if (!repeat ) nbStation('7'); break;
+			case KEY_8: if (!repeat ) nbStation('8'); break;
+			case KEY_9: if (!repeat ) nbStation('9'); break;
+			case KEY_STAR: if (!repeat ) playStationInt(futurNum); break;
+			case KEY_DIESE: if (!repeat )  stopStation(); break;
+			case KEY_INFO: if (!repeat ) toggletime(); break;
+			default: ;
 		}
 		ESP_LOGV(TAG,"irCustom success, evtir %x, i: %d",evtir,i);
 		return true;
@@ -775,141 +676,135 @@ bool irCustom(uint32_t evtir, bool repeat)
 	return false;
 }
 
- //-----------------------
- // Compute the ir code
- //----------------------
- 
- void irLoop()
- {
-// IR
-event_ir_t evt;
-	while (xQueueReceive(event_ir, &evt, 0))
+//-----------------------
+// Compute the ir code
+//----------------------
+void irLoop()
+{
+	// IR
+	event_ir_t evt;
+	while (xQueueReceive(irQueue, &evt, 0))
 	{
 		wakeLcd();
 		uint32_t evtir = ((evt.addr)<<8)|(evt.cmd&0xFF);
 		ESP_LOGI(TAG,"IR event: Channel: %x, ADDR: %x, CMD: %x = %X, REPEAT: %d",evt.channel,evt.addr,evt.cmd, evtir,evt.repeat_flag );
-		
 		if (isCustomKey){
 			if (irCustom(evtir,evt.repeat_flag)) continue;
+		} else{ // no predefined keys
+			switch(evtir)
+			{
+				case 0xDF2047:
+				case 0xDF2002:
+				case 0xFF0046:
+				case 0xF70812:  /*(" UP");*/  evtStation(+1);
+					break;
+				case 0xDF2049:
+				case 0xDF2041:
+				case 0xFF0044:
+				case 0xF70842:
+				case 0xF70815: /*(" LEFT");*/  setRelVolume(-5);
+					break;
+				case 0xDF204A:
+				case 0xFF0040:
+				case 0xF7081E: /*(" OK");*/ if (!evt.repeat_flag ) stationOk();
+					break;
+				case 0xDF204B:
+				case 0xDF2003:
+				case 0xFF0043:
+				case 0xF70841:
+				case 0xF70814: /*(" RIGHT");*/ setRelVolume(+5);
+					break;
+				case 0xDF204D:
+				case 0xDF2009:
+				case 0xFF0015:
+				case 0xF70813: /*(" DOWN");*/ evtStation(-1);
+					break;
+				case 0xDF2000:
+				case 0xFF0016:
+				case 0xF70801: /*(" 1");*/ if (!evt.repeat_flag ) nbStation('1');
+					break;
+				case 0xDF2010:
+				case 0xFF0019:
+				case 0xF70802: /*(" 2");*/ if (!evt.repeat_flag ) nbStation('2');
+					break;
+				case 0xDF2011:
+				case 0xFF000D:
+				case 0xF70803: /*(" 3");*/ if (!evt.repeat_flag ) nbStation('3');
+					break;
+				case 0xDF2013:
+				case 0xFF000C:
+				case 0xF70804: /*(" 4");*/ if (!evt.repeat_flag ) nbStation('4');
+					break;
+				case 0xDF2014:
+				case 0xFF0018:
+				case 0xF70805: /*(" 5");*/ if (!evt.repeat_flag ) nbStation('5');
+					break;
+				case 0xDF2015:
+				case 0xFF005E:
+				case 0xF70806: /*(" 6");*/ if (!evt.repeat_flag ) nbStation('6');
+					break;
+				case 0xDF2017:
+				case 0xFF0008:
+				case 0xF70807: /*(" 7");*/ if (!evt.repeat_flag ) nbStation('7');
+					break;
+				case 0xDF2018:
+				case 0xFF001C:
+				case 0xF70808: /*(" 8");*/ if (!evt.repeat_flag ) nbStation('8');
+					break;
+				case 0xDF2019:
+				case 0xFF005A:
+				case 0xF70809: /*(" 9");*/ if (!evt.repeat_flag ) nbStation('9');
+					break;
+				case 0xDF2045:
+				case 0xFF0042:
+				case 0xF70817: /*(" *");*/   if (!evt.repeat_flag ) playStationInt(futurNum);
+					break;
+				case 0xDF201B:
+				case 0xFF0052:
+				case 0xF70800: /*(" 0");*/ if (!evt.repeat_flag ) nbStation('0');
+					break;
+				case 0xDF205B:
+				case 0xFF004A:
+				case 0xF7081D: /*(" #");*/ if (!evt.repeat_flag )  stopStation();
+					break;
+				case 0xDF2007: /*(" Info")*/ if (!evt.repeat_flag ) toggletime();
+					break;
+				default:;
+					/*SERIALX.println(F(" other button   "));*/
+			}// End Case
 		}
-		else{ // no predefined keys
-		switch(evtir)
-		{
-		case 0xDF2047:
-		case 0xDF2002:
-		case 0xFF0046: 
-		case 0xF70812:  /*(" UP");*/  evtStation(+1);  
-		break;
-		case 0xDF2049:
-		case 0xDF2041:
-		case 0xFF0044:
-		case 0xF70842:
-		case 0xF70815: /*(" LEFT");*/  setRelVolume(-5);  
-		break;
-		case 0xDF204A:
-		case 0xFF0040:
-		case 0xF7081E: /*(" OK");*/ if (!evt.repeat_flag ) stationOk();     
-		break;
-		case 0xDF204B:
-		case 0xDF2003:
-		case 0xFF0043:
-		case 0xF70841:
-		case 0xF70814: /*(" RIGHT");*/ setRelVolume(+5);     
-		break; 
-		case 0xDF204D:
-		case 0xDF2009:
-		case 0xFF0015:
-		case 0xF70813: /*(" DOWN");*/ evtStation(-1);
-		break;
-		case 0xDF2000:
-		case 0xFF0016:
-		case 0xF70801: /*(" 1");*/ if (!evt.repeat_flag ) nbStation('1');   
-		break;
-		case 0xDF2010:
-		case 0xFF0019:
-		case 0xF70802: /*(" 2");*/ if (!evt.repeat_flag ) nbStation('2');   
-		break;
-		case 0xDF2011:
-		case 0xFF000D:
-		case 0xF70803: /*(" 3");*/ if (!evt.repeat_flag ) nbStation('3');   
-		break;
-		case 0xDF2013:
-		case 0xFF000C:
-		case 0xF70804: /*(" 4");*/ if (!evt.repeat_flag ) nbStation('4');   
-		break;
-		case 0xDF2014:
-		case 0xFF0018:
-		case 0xF70805: /*(" 5");*/ if (!evt.repeat_flag ) nbStation('5');   
-		break;
-		case 0xDF2015:
-		case 0xFF005E:
-		case 0xF70806: /*(" 6");*/ if (!evt.repeat_flag ) nbStation('6');   
-		break;
-		case 0xDF2017:
-		case 0xFF0008:
-		case 0xF70807: /*(" 7");*/ if (!evt.repeat_flag ) nbStation('7');   
-		break;
-		case 0xDF2018:
-		case 0xFF001C:
-		case 0xF70808: /*(" 8");*/ if (!evt.repeat_flag ) nbStation('8');   
-		break;
-		case 0xDF2019:
-		case 0xFF005A:
-		case 0xF70809: /*(" 9");*/ if (!evt.repeat_flag ) nbStation('9');   
-		break;
-		case 0xDF2045:
-		case 0xFF0042:
-		case 0xF70817: /*(" *");*/   if (!evt.repeat_flag ) playStationInt(futurNum);   
-		break;
-		case 0xDF201B:
-		case 0xFF0052:
-		case 0xF70800: /*(" 0");*/ if (!evt.repeat_flag ) nbStation('0');   
-		break;
-		case 0xDF205B:
-		case 0xFF004A:
-		case 0xF7081D: /*(" #");*/ if (!evt.repeat_flag )  stopStation();    
-		break;
-		case 0xDF2007: /*(" Info")*/ if (!evt.repeat_flag ) toggletime();	
-		break;
-		default:;
-		/*SERIALX.println(F(" other button   "));*/
-		}// End Case
-		}		
 	}
 }
- 
+
 void initButtonDevices()
 {
-//	struct device_settings *device;
 	gpio_num_t enca0;
 	gpio_num_t encb0;
 	gpio_num_t encbtn0;
 	gpio_num_t enca1;
 	gpio_num_t encb1;
-	gpio_num_t encbtn1;	
+	gpio_num_t encbtn1;
 	bool abtn0,abtn1;
-	gpio_get_encoders(&enca0, &encb0, &encbtn0,&enca1, &encb1, &encbtn1);
+	gpio_get_encoders(&enca0, &encb0, &encbtn0, &enca1, &encb1, &encbtn1);
 	if (enca1 == GPIO_NONE) isEncoder1 = false; //no encoder
 	if (enca0 == GPIO_NONE) isEncoder0 = false; //no encoder
-	if (isEncoder0)	encoder0 = ClickEncoderInit(enca0, encb0, encbtn0,((g_device->options32&T_ENC0)==0)?false:true );	
-	if (isEncoder1)	encoder1 = ClickEncoderInit(enca1, encb1, encbtn1,((g_device->options32&T_ENC1)==0)?false:true );	
-	
-	gpio_get_buttons(&enca0, &encb0, &encbtn0,&enca1, &encb1, &encbtn1);
+	if (isEncoder0)	encoder0 = ClickEncoderInit(enca0, encb0, encbtn0,((g_device->options32&T_ENC0)==0)?false:true );
+	if (isEncoder1)	encoder1 = ClickEncoderInit(enca1, encb1, encbtn1,((g_device->options32&T_ENC1)==0)?false:true );
+
+	gpio_get_buttons(&enca0, &encb0, &encbtn0, &enca1, &encb1, &encbtn1);
 	if (enca1 == GPIO_NONE) isButton1 = false; //no encoder
-	if (enca0 == GPIO_NONE) isButton0 = false; //no encoder	
-	
+	if (enca0 == GPIO_NONE) isButton0 = false; //no encoder
+
 	gpio_get_active_buttons(&abtn0, &abtn1);
-	if (isButton0)	button0 = ClickButtonsInit(enca0, encb0, encbtn0,abtn0);	
-	if (isButton1)	button1 = ClickButtonsInit(enca1, encb1, encbtn1,abtn1 );	
-	
-	gpio_get_joysticks(&enca0,&enca1);
+	if (isButton0)	button0 = ClickButtonsInit(enca0, encb0, encbtn0, abtn0);
+	if (isButton1)	button1 = ClickButtonsInit(enca1, encb1, encbtn1, abtn1 );
+
+	gpio_get_joysticks(&enca0, &enca1);
 	if (enca0 == GPIO_NONE) isJoystick0 = false; //no encoder
 	if (enca1 == GPIO_NONE) isJoystick1 = false; //no encoder
-	if (isJoystick0)	joystick0 = ClickJoystickInit(enca0 );	
-	if (isJoystick1)	joystick1 = ClickJoystickInit(enca1);	
-	
+	if (isJoystick0)	joystick0 = ClickJoystickInit(enca0 );
+	if (isJoystick1)	joystick1 = ClickJoystickInit(enca1);
 }
-
 
 // custom ir code init from hardware nvs partition
 #define hardware "hardware"
@@ -918,10 +813,8 @@ void customKeyInit()
 	customKey_t index;
 	nvs_handle handle;
 	const char *klab[] = {"K_UP","K_LEFT","K_OK","K_RIGHT","K_DOWN","K_0","K_1","K_2","K_3","K_4","K_5","K_6","K_7","K_8","K_9","K_STAR","K_DIESE","K_INFO"};
-	
 	memset(&customKey,0,sizeof(uint32_t)*2*KEY_MAX); // clear custom
 	if (open_partition(hardware, "custom_ir_space",NVS_READONLY,&handle)!= ESP_OK) return;
-		
 	for (index = KEY_UP; index < KEY_MAX;index++)
 	{
 		// get the key in the nvs
@@ -929,14 +822,13 @@ void customKeyInit()
 		ESP_LOGV(TAG," isCustomKey is %d for %d",isCustomKey,index);
 		taskYIELD();
 	}
-	close_partition(handle,hardware);	
+	close_partition(handle,hardware);
 }
 
 // touch loop
-
 void touchLoop()
 {
-int tx,ty;
+	int tx,ty;
 	if (haveTouch())
 	{
 		if ( xpt_read_touch(&tx, &ty, 0)) {
@@ -955,13 +847,12 @@ int tx,ty;
 			{
 				if ((tx > xl) && (tx < xh)) startStop(); // center
 				else {
-					if (tx < xl) evtStation(-1); // 
+					if (tx < xl) evtStation(-1); //
 					else evtStation(+1);// evtStation(1);
 				}
-			} else 
-				if (ty < yl) setRelVolume(+5); 
-			else setRelVolume(-5); 
-			
+			} else
+				if (ty < yl) setRelVolume(+5);
+				else setRelVolume(-5);
 		}
 	}
 }
@@ -982,58 +873,53 @@ IRAM_ATTR void multiService()  // every 1ms
 		divide = 0;
 	}
 }
+
 //--------------------
 // LCD display task
 //--------------------
-
 void task_lcd(void *pvParams)
 {
-	event_lcd_t evt ; // lcd event	
-	event_lcd_t evt1 ; // lcd event	
+	event_lcd_t evt ; // lcd event
+	event_lcd_t evt1 ; // lcd event
 	ESP_LOGD(TAG, "task_lcd Started, LCD Type %d",lcd_type);
 	defaultStateScreen = (g_device->options32&T_TOGGLETIME)? stime:smain;
-	if (lcd_type != LCD_NONE)  drawFrame();
-
+	drawFrame();
 	while (1)
-	{	
+	{
 		if (itLcdOut==1) // switch off the lcd
 		{
 			sleepLcd();
 		}
-
 		if (timerScroll >= 500) //500 ms
 		{
-			if (lcd_type != LCD_NONE) 
+			if (stateScreen == smain)
 			{
-				if (stateScreen == smain)
-				{
-					scroll(); 
-				}
-				if ((stateScreen == stime)||(stateScreen == smain)) {mTscreen = MTREFRESH; } // display time
-	
-				drawScreen();
+				scroll();
 			}
+			if ((stateScreen == stime)||(stateScreen == smain)) 
+			{
+				mTscreen = MTREFRESH; // display time
+			}
+			drawScreen();
 			timerScroll = 0;
-		}  		
-		if (event_lcd != NULL)
-		while (xQueueReceive(event_lcd, &evt, 0))
-		{ 
-//			if (lcd_type == LCD_NONE) continue;
+		}
+		while (xQueueReceive(lcdQueue, &evt, 0))
+		{
 			if (evt.lcmd != lmeta)
-				ESP_LOGV(TAG,"event_lcd: %x",(int)evt.lcmd);
+				ESP_LOGV(TAG,"lcdQueue: %x",(int)evt.lcmd);
 			else
-				ESP_LOGV(TAG,"event_lcd: %x  %s",(int)evt.lcmd,evt.lline); 
+				ESP_LOGV(TAG,"lcdQueue: %x  %s",(int)evt.lcmd,evt.lline);
 			switch(evt.lcmd)
 			{
 				case lmeta:
 					isColor?metaUcg(evt.lline):metaU8g2(evt.lline);
 					Screen(smain);
-					wakeLcd();					
+					wakeLcd();
 					break;
 				case licy4:
 					isColor?icy4Ucg(evt.lline):icy4U8g2(evt.lline);
 					break;
-				case licy0: 					
+				case licy0:
 					isColor?icy0Ucg(evt.lline):icy0U8g2(evt.lline);
 					break;
 				case lstop:
@@ -1044,114 +930,107 @@ void task_lcd(void *pvParams)
 				case lnameset:
 					isColor?namesetUcg(evt.lline):namesetU8g2(evt.lline);
 					isColor?statusUcg("STARTING"):statusU8g2("STARTING");
-					Screen(smain); 
+					Screen(smain);
 					wakeLcd();
 					break;
 				case lplay:
-					isColor?playingUcg():playingU8g2();						  
+					isColor?playingUcg():playingU8g2();
 					break;
 				case lvol:
 					// ignore it if the next is a lvol
-					if(xQueuePeek(event_lcd, &evt1, 0))
+					if(xQueuePeek(lcdQueue, &evt1, 0))
 						if (evt1.lcmd == lvol) break;
 					isColor?setVolumeUcg(volume):setVolumeU8g2(volume);
 					if (dvolume)
-					{	Screen(svolume); 
+					{	Screen(svolume);
 						wakeLcd();
 					}
-					dvolume = true;														
+					dvolume = true;
 					break;
 				case lovol:
 					dvolume = false; // don't show volume on start station
 					break;
 				case estation:
 					wakeLcd();
-					if(xQueuePeek(event_lcd, &evt1, 0))
+					if(xQueuePeek(lcdQueue, &evt1, 0))
 						if (evt1.lcmd == estation) {evt.lline = NULL;break;}
 					ESP_LOGD(TAG,"estation val: %d",(uint32_t)evt.lline);
-					changeStation((uint32_t)evt.lline);	
+					changeStation((uint32_t)evt.lline);
 					Screen(sstation);
-					evt.lline = NULL;	// just a number			
+					evt.lline = NULL;	// just a number
 					break;
 				case eclrs:
 					isColor?ucg_ClearScreen(&ucg):u8g2_ClearDisplay(&u8g2);
 					break;
-				case escreen: 
+				case escreen:
 					Screen((uint32_t)evt.lline);
 					wakeLcd();
-					evt.lline = NULL;	// just a number Don't free					
+					evt.lline = NULL;	// just a number Don't free
 					break;
 				case etoggle:
 					defaultStateScreen = (stateScreen==smain)?stime:smain;
 					(stateScreen==smain)?Screen(stime):Screen(smain);
-					g_device->options32 = (defaultStateScreen== smain)?g_device->options32&NT_TOGGLETIME:g_device->options32|T_TOGGLETIME; 
+					g_device->options32 = (defaultStateScreen== smain)?g_device->options32&NT_TOGGLETIME:g_device->options32|T_TOGGLETIME;
 					saveDeviceSettings(g_device);
 					break;
 				default:;
 			}
 			if (evt.lline != NULL) free(evt.lline);
-			vTaskDelay(1);  			
+			vTaskDelay(1);
 		 }
-		 if ((event_lcd)&&(!uxQueueMessagesWaiting(event_lcd))) vTaskDelay(4);
-		vTaskDelay(1);	
+		 if ((lcdQueue)&&(!uxQueueMessagesWaiting(lcdQueue))) vTaskDelay(4);
+		vTaskDelay(1);
 	}
-	vTaskDelete( NULL ); 	
+	vTaskDelete( NULL );
 }
 
-//------------------- 
+//-------------------
 // Main task of addon
-//------------------- 
+//-------------------
 extern void rmt_nec_rx_task();
-
 void task_addon(void *pvParams)
 {
 	xTaskHandle pxCreatedTask;
 	customKeyInit();
 	initButtonDevices();
 	adcInit();
-	
 	serviceAddon = &multiService;		; // connect the 1ms interruption
 	futurNum = getCurrentStation();
-	
-	//ir
+
 	// queue for events of the IR nec rx
-	event_ir = xQueueCreate(5, sizeof(event_ir_t));
-	ESP_LOGD(TAG,"event_ir: %x",(int)event_ir);
+	irQueue = xQueueCreate(5, sizeof(event_ir_t));
+	ESP_LOGD(TAG,"irQueue: %x",(int)irQueue);
+
 	// queue for events of the lcd
-	event_lcd = xQueueCreate(20, sizeof(event_lcd_t));
-	ESP_LOGD(TAG,"event_lcd: %x",(int)event_lcd);	
-	
+	lcdQueue = xQueueCreate(20, sizeof(event_lcd_t));
+	ESP_LOGD(TAG,"lcdQueue: %x",(int)lcdQueue);
+
 	xTaskCreatePinnedToCore(rmt_nec_rx_task, "rmt_nec_rx_task", 2148, NULL, PRIO_RMT, &pxCreatedTask,CPU_RMT);
 	ESP_LOGI(TAG, "%s task: %x","rmt_nec_rx_task",(unsigned int)pxCreatedTask);		;
-	xTaskCreatePinnedToCore (task_lcd, "task_lcd", 2200, NULL, PRIO_LCD, &pxTaskLcd,CPU_LCD); 
+
+	xTaskCreatePinnedToCore (task_lcd, "task_lcd", 2200, NULL, PRIO_LCD, &pxTaskLcd,CPU_LCD);
 	ESP_LOGI(TAG, "%s task: %x","task_lcd",(unsigned int)pxTaskLcd);
 	getTaskLcd(&pxTaskLcd); // give the handle to xpt
-//	vTaskDelay(1);	
-//	wakeLcd();
-	
 	while (1)
 	{
 		adcLoop();  // compute the adc keyboard
 		encoderLoop(); // compute the encoder
 		buttonsLoop(); // compute the buttons and joysticks
-		irLoop();  // compute the ir		
+		irLoop();  // compute the ir
 		touchLoop(); // compute the touch screen
 		if (itAskTime) // time to ntp. Don't do that in interrupt.
-		{			
+		{
 			if (ntp_get_time(&dt) )
-			{	
+			{
 				applyTZ(dt);
-				timestamp = mktime(dt); 
-				syncTime = true;				
-			} 
+				timestamp = mktime(dt);
+				syncTime = true;
+			}
 			itAskTime = false;
-		}	
-		
+		}
 		if (timerScreen >= 3) //  sec timeout transient screen
 		{
-//			if ((stateScreen != smain)&&(stateScreen != stime)&&(stateScreen != snull))
-//printf("timerScreen: %d, stateScreen: %d, defaultStateScreen: %d\n",timerScreen,stateScreen,defaultStateScreen);	
-			timerScreen = 0;				
+			timerScreen = 0;
 			if ((stateScreen != defaultStateScreen)&&(stateScreen != snull))
 			{
 				// Play the changed station on return to main screen
@@ -1160,135 +1039,118 @@ void task_addon(void *pvParams)
 					futurNum = atoi (irStr);
 					if (futurNum>254) futurNum = 0;
 					playable = true;
-					// clear the number       
+					// clear the number
 					irStr[0] = 0;
 				}
 				if ((strlen(isColor?getNameNumUcg():getNameNumU8g2()) != 0 )
-					&& playable 
-					&& ( futurNum!= atoi(  isColor?getNameNumUcg():getNameNumU8g2()  ))) 
+					&& playable
+					&& ( futurNum!= atoi(  isColor?getNameNumUcg():getNameNumU8g2()  )))
 				{
 					playStationInt(futurNum);
 					vTaskDelay(10);
-				}	
+				}
 				if (!itAskStime)
 				{
 					if ((defaultStateScreen == stime) && (stateScreen != smain))evtScreen(smain);
 					else
-					if ((defaultStateScreen == stime) && (stateScreen == smain))evtScreen(stime);	
-					else 
-					if 	(stateScreen != defaultStateScreen)
-					evtScreen(defaultStateScreen); //Back to the old screen
+					if ((defaultStateScreen == stime) && (stateScreen == smain))evtScreen(stime);
+					else
+					if (stateScreen != defaultStateScreen)
+						evtScreen(defaultStateScreen); //Back to the old screen
 				}
 			}
-			if (itAskStime&&(stateScreen != stime)) // time start the time display. Don't do that in interrupt.  
-				evtScreen(stime);			
+			if (itAskStime&&(stateScreen != stime)) // time start the time display. Don't do that in interrupt.
+				evtScreen(stime);
 		}
-
 		vTaskDelay(20);
-	}	
-	vTaskDelete( NULL ); 
+	}
+	vTaskDelete( NULL );
 }
 
 // force a new dt ntp fetch
 void addonDt() { itAskTime = true; }
-
-
 ////////////////////////////////////////
 // parse the karadio received line and do the job
 void addonParse(const char *fmt, ...)
 {
 	event_lcd_t evt;
 	char *line = NULL;
-//	char* lfmt;
 	int rlen;
 	line = (char *)malloc(1024);
 	if (line == NULL) return;
 	line[0] = 0;
 	strcpy(line,"ok\n");
-	
 	va_list ap;
-	va_start(ap, fmt);	
-	rlen = vsprintf(line,fmt, ap);		
+	va_start(ap, fmt);
+	rlen = vsprintf(line,fmt, ap);
 	va_end(ap);
 	line = realloc(line,rlen+1);
-	if (line == NULL) return;	
+	if (line == NULL) return;
 	ESP_LOGV(TAG,"LINE: %s",line);
 	evt.lcmd = -1;
-  char* ici;
- 
- ////// Meta title  ##CLI.META#: 
-   if ((ici=strstr(line,"META#: ")) != NULL)
-   {     
+	char* ici;
+////// Meta title  ##CLI.META#:
+	if ((ici=strstr(line,"META#: ")) != NULL)
+	{
 		evt.lcmd = lmeta;
 		evt.lline = malloc(strlen(ici)+1);
-		//evt.lline = NULL;
 		strcpy(evt.lline,ici);
-//		xQueueSend(event_lcd,&evt, 0);
-   } else 
+	} else
  ////// ICY4 Description  ##CLI.ICY4#:
-    if ((ici=strstr(line,"ICY4#: ")) != NULL)
-    {
+	if ((ici=strstr(line,"ICY4#: ")) != NULL)
+	{
 		evt.lcmd = licy4;
 		evt.lline = malloc(strlen(ici)+1);
-		//evt.lline = NULL;
 		strcpy(evt.lline,ici);
-//		xQueueSend(event_lcd,&evt, 0);
-    } else 
+	} else
  ////// ICY0 station name   ##CLI.ICY0#:
-   if ((ici=strstr(line,"ICY0#: ")) != NULL)
-   {
+	if ((ici=strstr(line,"ICY0#: ")) != NULL)
+	{
 		evt.lcmd = licy0;
 		evt.lline = malloc(strlen(ici)+1);
-		//evt.lline = NULL;
 		strcpy(evt.lline,ici);
-//		xQueueSend(event_lcd,&evt, 0);
-   } else
- ////// STOPPED  ##CLI.STOPPED#  
-   if (((ici=strstr(line,"STOPPED")) != NULL)&&(strstr(line,"C_HDER") == NULL)&&(strstr(line,"C_PLIST") == NULL))
-   {
-		state = false;	  
+	} else
+ ////// STOPPED  ##CLI.STOPPED#
+	if (((ici=strstr(line,"STOPPED")) != NULL)&&(strstr(line,"C_HDER") == NULL)&&(strstr(line,"C_PLIST") == NULL))
+	{
+		state = false;
  		evt.lcmd = lstop;
 		evt.lline = NULL;
-//		xQueueSend(event_lcd,&evt, 0);
-   }    
-   else  
+	}
+	else
  //////Nameset    ##CLI.NAMESET#:
-   if ((ici=strstr(line,"MESET#: ")) != NULL)  
-   {   
+	if ((ici=strstr(line,"MESET#: ")) != NULL)
+	{
 	  	evt.lcmd = lnameset;
 		evt.lline = malloc(strlen(ici)+1);
-		//evt.lline = NULL;
 		strcpy(evt.lline,ici);
-//		xQueueSend(event_lcd,&evt, 0);
-   } else
+	} else
  //////Playing    ##CLI.PLAYING#
-   if ((ici=strstr(line,"YING#")) != NULL)  
-   {
+	if ((ici=strstr(line,"YING#")) != NULL)
+	{
 		state = true;
 		itAskStime = false;
  		evt.lcmd = lplay;
 		evt.lline = NULL;
-//		xQueueSend(event_lcd,&evt, 0);
-   } else
-   //////Volume   ##CLI.VOL#:
-   if ((ici=strstr(line,"VOL#:")) != NULL)  
-   {
-	   if (*(ici+6) != 'x') // ignore help display.
-	   {
-		volume = atoi(ici+6);
- 		evt.lcmd = lvol;
-		evt.lline = NULL;//atoi(ici+6);
-//		xQueueSend(event_lcd,&evt, 0);
-	   }
-   } else
-  //////Volume offset    ##CLI.OVOLSET#:
-   if ((ici=strstr(line,"OVOLSET#:")) != NULL)  
-   {
-	    evt.lcmd = lovol;
+	} else
+//////Volume   ##CLI.VOL#:
+	if ((ici=strstr(line,"VOL#:")) != NULL)
+	{
+		if (*(ici+6) != 'x') // ignore help display.
+		{
+			volume = atoi(ici+6);
+			evt.lcmd = lvol;
+			evt.lline = NULL;
+		}
+	} else
+//////Volume offset    ##CLI.OVOLSET#:
+	if ((ici=strstr(line,"OVOLSET#:")) != NULL)
+	{
+		evt.lcmd = lovol;
 		evt.lline = NULL;
-//		xQueueSend(event_lcd,&evt, 0);
-   }
-   if (evt.lcmd != -1) xQueueSend(event_lcd,&evt, 0);
-   free (line);
+	}
+	if (evt.lcmd != -1) xQueueSend(lcdQueue,&evt, 0);
+	free (line);
 }
+
 

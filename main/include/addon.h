@@ -85,7 +85,7 @@ typedef struct {
 #define VCTRL	true
 #define SCTRL	false
 
-extern xQueueHandle event_ir;
+extern xQueueHandle irQueue;
 extern u8g2_t u8g2;
 extern ucg_t ucg;
 void task_addon(void *pvParams);
@@ -100,5 +100,7 @@ void addonDt();
 void wakeLcd();
 void* getEncoder(int num);
 struct tm* getDt();
+
+
 
 #endif
